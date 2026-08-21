@@ -1,0 +1,74 @@
+import { Request, Response } from 'express';
+import { z } from 'zod';
+import { ErreurApplicative } from '../../middleware/gestionErreurs';
+import { filialesAutoriseesPour } from '../../middleware/autorisation';
+import { affecterChantierEmploye, changerStatutEmploye, creerEmploye, listerEmployes, obtenirEmploye } from './employes.service';
+
+const schemaStatut = z.object({
+  statut: z.enum(['en_cours_creation', 'actif', 'suspendu', 'sorti']),
+});
+
+const schemaChantier = z.object({
+  chantierId: z.string().uuid().nullable(),
+});
+
+const schemaCreationEmploye = z.object({
+  matricule: z.string().min(1),
+  nom: z.string().min(1),
+  prenoms: z.string().min(1),
+  dateNaissance: z.string(),
+  sexe: z.enum(['M', 'F']),
+  nationalite: z.string().min(1),
+  telephone: z.string().min(1),
+  numCnib: z.string().min(1),
+  numCnss: z.string().min(1),
+  rib: z.string().optional(),
+  banque: z.string().optional(),
+  modePaiement: z.string().optional(),
+  personnesACharge: z.number().int().nonnegative().optional(),
+  filialeId: z.string().uuid(),
+  departementId: z.string().uuid().optional(),
+  serviceId: z.string().uuid().optional(),
+  fonctionId: z.string().uuid().optional(),
+  chantierId: z.string().uuid().optional(),
+  dateEmbauche: z.string(),
+  categorieProfessionnelle: z.string().min(1).optional(),
+});
+
+export async function lister(req: Request, res: Response) {
+  const filiales = filialesAutoriseesPour(req.utilisateur!);
+  const recherche = req.query.recherche as string | undefined;
+  const limite = req.query.limite ? Number(req.query.limite) : undefined;
+  res.json(await listerEmployes(filiales, recherche, limite));
+}
+
+export async function obtenir(req: Request, res: Response) {
+  const employe = await obtenirEmploye(req.params.id);
+
+  if (!employe) {
+    throw new ErreurApplicative(404, 'Employé introuvable');
+  }
+
+  const filiales = filialesAutoriseesPour(req.utilisateur!);
+  if (filiales !== null && !filiales.includes(employe.filialeId)) {
+    throw new ErreurApplicative(403, "Cet employé n'appartient pas à votre périmètre");
+  }
+
+  res.json(employe);
+}
+
+export async function creer(req: Request, res: Response) {
+  const donnees = schemaCreationEmploye.parse(req.body);
+  const employe = await creerEmploye(donnees);
+  res.status(201).json(employe);
+}
+
+export async function changerStatut(req: Request, res: Response) {
+  const { statut } = schemaStatut.parse(req.body);
+  res.json(await changerStatutEmploye(req.params.id, statut));
+}
+
+export async function affecterChantier(req: Request, res: Response) {
+  const { chantierId } = schemaChantier.parse(req.body);
+  res.json(await affecterChantierEmploye(req.params.id, chantierId));
+}

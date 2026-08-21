@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary-50: #eff6ff;
+  --color-primary-100: #dbeafe;
+  --color-primary-200: #bfdbfe;
+  --color-primary-500: #3b82f6;
+  --color-primary-600: #2563eb;
+  --color-primary-700: #1d4ed8;
+  --color-primary-800: #1e40af;
+  --color-primary-900: #1e3a8a;
+
+  --color-accent-50: #f0fdfa;
+  --color-accent-100: #ccfbf1;
+  --color-accent-500: #14b8a6;
+  --color-accent-600: #0d9488;
+  --color-accent-700: #0f766e;
+
+  --color-succes-100: #dcfce7;
+  --color-succes-600: #16a34a;
+  --color-succes-700: #15803d;
+
+  --color-alerte-100: #fef3c7;
+  --color-alerte-600: #d97706;
+  --color-alerte-700: #b45309;
+
+  --color-erreur-100: #fee2e2;
+  --color-erreur-600: #dc2626;
+  --color-erreur-700: #b91c1c;
+}
+
+body {
+  @apply bg-slate-50 text-slate-900;
+}
+
+@keyframes apparaitre-monter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes remplir-barre {
+  to {
+    width: var(--largeur-cible);
+  }
+}
+
+.anim-cascade {
+  opacity: 0;
+  animation: apparaitre-monter 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.anim-barre {
+  width: 0;
+  animation: remplir-barre 0.9s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation-delay: 0.15s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-cascade,
+  .anim-barre {
+    animation: none !important;
+    opacity: 1 !important;
+    width: var(--largeur-cible, 100%) !important;
+  }
+}
