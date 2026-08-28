@@ -59,6 +59,7 @@ export function Employes() {
 
   const [employes, setEmployes] = useState<Employe[]>([]);
   const [filiales, setFiliales] = useState<Filiale[]>([]);
+  const [filialesVisibles, setFilialesVisibles] = useState<Filiale[]>([]);
   const [chantiers, setChantiers] = useState<Chantier[]>([]);
   const [chantierEnCours, setChantierEnCours] = useState(false);
   const [categories, setCategories] = useState<CategorieProfessionnelle[]>([]);
@@ -86,9 +87,12 @@ export function Employes() {
 
   useEffect(rafraichir, [jeton]);
 
+  // Liste complète (pas visiblesUniquement) : nécessaire pour afficher le nom de la filiale des
+  // employés déjà rattachés à une filiale archivée — seul le formulaire de création filtre.
   function rafraichirFiliales() {
     if (!jeton) return;
     api.listerFiliales(jeton).then(setFiliales);
+    api.listerFiliales(jeton, true).then(setFilialesVisibles);
   }
 
   useEffect(rafraichirFiliales, [jeton]);
@@ -317,7 +321,7 @@ export function Employes() {
                 className={CHAMP}
               >
                 <option value="">— Choisir —</option>
-                {filiales.map((f) => (
+                {filialesVisibles.map((f) => (
                   <option key={f.id} value={f.id}>
                     {f.nom}
                   </option>

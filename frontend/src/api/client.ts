@@ -331,6 +331,7 @@ export const api = {
       categorie: 'CADRE' | 'NON_CADRE';
       personnesACharge?: number;
       ancienneteAnnees?: number;
+      salaireDeBase?: number;
       sursalaire?: number;
       indemniteLogement?: number;
       indemniteTransport?: number;

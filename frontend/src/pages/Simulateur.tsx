@@ -30,6 +30,7 @@ export function Simulateur() {
   const [champVariable, setChampVariable] = useState<'salaireDeBase' | 'sursalaire'>('salaireDeBase');
 
   const [indemnitesOuvertes, setIndemnitesOuvertes] = useState(false);
+  const [salaireDeBase, setSalaireDeBase] = useState('0');
   const [sursalaire, setSursalaire] = useState('0');
   const [indemniteLogement, setIndemniteLogement] = useState('0');
   const [indemniteTransport, setIndemniteTransport] = useState('0');
@@ -56,6 +57,7 @@ export function Simulateur() {
         categorie,
         personnesACharge: Number(personnesACharge),
         ancienneteAnnees: Number(ancienneteAnnees),
+        salaireDeBase: Number(salaireDeBase),
         sursalaire: Number(sursalaire),
         indemniteLogement: Number(indemniteLogement),
         indemniteTransport: Number(indemniteTransport),
@@ -126,6 +128,12 @@ export function Simulateur() {
             <label className={LABEL}>Ancienneté (années)</label>
             <input type="number" min="0" value={ancienneteAnnees} onChange={(e) => setAncienneteAnnees(e.target.value)} className={CHAMP} />
           </div>
+          {champVariable === 'sursalaire' && (
+            <div>
+              <label className={LABEL}>Salaire de base</label>
+              <input type="number" value={salaireDeBase} onChange={(e) => setSalaireDeBase(e.target.value)} className={CHAMP} />
+            </div>
+          )}
         </div>
 
         <button

@@ -34,6 +34,7 @@ const schemaSimulation = z.object({
   categorie: z.enum(['CADRE', 'NON_CADRE']),
   personnesACharge: z.number().int().nonnegative().optional(),
   ancienneteAnnees: z.number().int().nonnegative().optional(),
+  salaireDeBase: z.number().nonnegative().optional(),
   sursalaire: z.number().nonnegative().optional(),
   indemniteLogement: z.number().nonnegative().optional(),
   indemniteTransport: z.number().nonnegative().optional(),

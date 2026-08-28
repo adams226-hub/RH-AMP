@@ -344,7 +344,10 @@ export async function simulerNetVersBrut(donnees: SimulationNetVersBrut): Promis
   const resultat = calculerBrutDepuisNet(
     donnees.netCible,
     {
-      salaireDeBase: 0,
+      // Fixe quand on calcule le sursalaire (l'utilisateur connaît déjà le salaire de base et
+      // cherche le complément) ; ignoré par la dichotomie quand champVariable='salaireDeBase'
+      // puisqu'elle écrase alors ce champ à chaque itération.
+      salaireDeBase: donnees.salaireDeBase ?? 0,
       indemniteLogement: donnees.indemniteLogement ?? 0,
       indemniteTransport: donnees.indemniteTransport ?? 0,
       indemniteSujetion: donnees.indemniteSujetion ?? 0,
