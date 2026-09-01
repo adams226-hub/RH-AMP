@@ -28,6 +28,7 @@ import { ParametrePaie } from '../types/parametresPaie';
 import { CreationJourFerie, JourFerie } from '../types/joursFeries';
 import { CyclePaie, ResumeCyclePaie } from '../types/cyclesPaie';
 import { CategorieProfessionnelle } from '../types/categoriesProfessionnelles';
+import { Attestation, AttestationAvecEmploye, DonneesAttestation, Stagiaire, TypeAttestation } from '../types/attestations';
 import { CodeRole } from '../context/AuthContext';
 
 const URL_API = import.meta.env.VITE_API_URL;
@@ -145,6 +146,16 @@ export const api = {
     requete<Filiale>(`/api/postes/filiales/${id}`, { method: 'PATCH', body: JSON.stringify({ nom }) }, jeton),
   archiverFiliale: (jeton: string, id: string, actif: boolean) =>
     requete<Filiale>(`/api/postes/filiales/${id}/statut`, { method: 'POST', body: JSON.stringify({ actif }) }, jeton),
+  modifierCoordonneesFiliale: (
+    jeton: string,
+    id: string,
+    donnees: { adresse?: string; rccm?: string; ifu?: string; telephone?: string; siteWeb?: string; couleurAccent?: string }
+  ) => requete<Filiale>(`/api/postes/filiales/${id}/coordonnees`, { method: 'PATCH', body: JSON.stringify(donnees) }, jeton),
+  uploaderLogoFiliale: (jeton: string, id: string, fichier: File) => {
+    const forme = new FormData();
+    forme.append('logo', fichier);
+    return requeteFichier<Filiale>(`/api/postes/filiales/${id}/logo`, forme, jeton);
+  },
   listerDepartements: (jeton: string, visiblesUniquement = false) =>
     requete<Departement[]>(`/api/postes/departements${visiblesUniquement ? '?visiblesUniquement=true' : ''}`, {}, jeton),
   creerDepartement: (jeton: string, donnees: { filialeId: string; nom: string }) =>
@@ -280,6 +291,8 @@ export const api = {
       {},
       jeton
     ),
+  // Heures sup 15/35/60%, jours panier et compteurs d'absence ne se saisissent plus ici — ils
+  // sont recalculés automatiquement côté serveur depuis `jours` (grille journalière).
   enregistrerFichePointage: (
     jeton: string,
     donnees: {
@@ -287,15 +300,7 @@ export const api = {
       chantierId: string;
       periodeDebut: string;
       periodeFin: string;
-      heuresHs15?: number;
-      heuresHs35?: number;
-      heuresHs60?: number;
-      joursPanier?: number;
-      nbJoursAbsenceInjustifiee?: number;
-      nbJoursReposMedical?: number;
-      nbJoursPermissionNonPayee?: number;
-      nbJoursPermissionPayee?: number;
-      nbJoursCongeAnnuel?: number;
+      jours?: { date: string; heures?: number; codeAbsence?: CodeAbsencePointage }[];
     }
   ) => requete<PointageMensuel>('/api/pointage/fiches', { method: 'POST', body: JSON.stringify(donnees) }, jeton),
   soumettreFichePointage: (jeton: string, id: string) =>
@@ -521,4 +526,20 @@ export const api = {
     requete<JourFerie>('/api/jours-feries', { method: 'POST', body: JSON.stringify(donnees) }, jeton),
   supprimerJourFerie: (jeton: string, id: string) =>
     requete<void>(`/api/jours-feries/${id}`, { method: 'DELETE' }, jeton),
+
+  // Attestations
+  listerAttestations: (jeton: string, employeId?: string) =>
+    requete<AttestationAvecEmploye[]>(`/api/attestations${employeId ? `?employeId=${employeId}` : ''}`, {}, jeton),
+  apercuAttestation: (jeton: string, employeId: string, type: TypeAttestation) =>
+    requete<DonneesAttestation>(`/api/attestations/apercu?employeId=${employeId}&type=${type}`, {}, jeton),
+  genererAttestation: (jeton: string, donnees: { employeId: string; type: TypeAttestation; donnees: DonneesAttestation }) =>
+    requete<Attestation>('/api/attestations', { method: 'POST', body: JSON.stringify(donnees) }, jeton),
+  obtenirAttestationPdf: (jeton: string, id: string) => requeteBlob(`/api/attestations/${id}/pdf`, jeton),
+  obtenirStagiaire: (jeton: string, employeId: string) =>
+    requete<Stagiaire | null>(`/api/attestations/stagiaires/${employeId}`, {}, jeton),
+  enregistrerStagiaire: (
+    jeton: string,
+    employeId: string,
+    donnees: { filiereEtudes?: string; etablissement?: string; superviseurId?: string }
+  ) => requete<Stagiaire>(`/api/attestations/stagiaires/${employeId}`, { method: 'POST', body: JSON.stringify(donnees) }, jeton),
 };

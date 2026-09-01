@@ -8,7 +8,9 @@ export type TypeElementSaisissable =
   | 'absence_injustifiee'
   | 'trop_percu'
   | 'heure_sup_50'
-  | 'heure_sup_120';
+  | 'heure_sup_120'
+  | 'prime_salissure'
+  | 'prime_lait';
 
 export interface ElementVariable {
   id: string;

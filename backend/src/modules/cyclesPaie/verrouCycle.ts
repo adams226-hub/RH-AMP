@@ -8,8 +8,8 @@ import { ErreurApplicative } from '../../middleware/gestionErreurs';
 // le RH siège), donc ne bloque rien.
 //
 // Fichier séparé du module cyclesPaie (types/service/controller/routes) pour éviter un import
-// circulaire : paie.service, elementsVariables.service et pointage.service appellent ce verrou,
-// et cyclesPaie.service appelle lui-même calculerMasseSalariale() de paie.service.
+// circulaire : paie.ts, elementsVariables.service et pointage.service appellent ce verrou,
+// et cyclesPaie.service appelle lui-même calculerMasseSalariale() de paie.ts.
 export async function verifierCycleOuvertPourFiliale(filialeId: string, periode: string): Promise<void> {
   const { rows } = await pool.query(
     `SELECT statut FROM cycles_paie WHERE filiale_id = $1 AND mois_paie = date_trunc('month', $2::date)`,

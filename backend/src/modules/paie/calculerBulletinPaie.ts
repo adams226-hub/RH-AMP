@@ -106,6 +106,9 @@ export interface ElementsVariables {
   reliquat: number;
   /** Non défini dans les règles fournies — AMBIGUÏTÉ SIGNALÉE, défaut 0 */
   panier?: number;
+  /** Même traitement que panier (exclues de l'assiette CNSS, soumises à l'IUTS) — décision produit */
+  primeSalissure?: number;
+  primeLait?: number;
   /** Date de référence pour le calcul d'ancienneté — défaut : aujourd'hui */
   dateReference?: Date;
 }
@@ -242,20 +245,31 @@ function calculerRemunerationTotale(
   primeAnciennete: number,
   autresIndemnites: number,
   heuresSupplementairesForfaitaires: number,
-  panier: number
+  panier: number,
+  primeSalissure: number,
+  primeLait: number
 ): number {
   const sommeElementsProratises = Object.values(elementsProratises).reduce((s, v) => s + v, 0);
   return (
-    sommeElementsProratises + totalHeuresSup + primeAnciennete + autresIndemnites + heuresSupplementairesForfaitaires + panier
+    sommeElementsProratises +
+    totalHeuresSup +
+    primeAnciennete +
+    autresIndemnites +
+    heuresSupplementairesForfaitaires +
+    panier +
+    primeSalissure +
+    primeLait
   );
 }
 
 // Règle CNSS (part salariale) :
 // taux = 5.5% si déclaration CNSS = "O", sinon 0
 // retenue_CNSS = 44 000 si rémunération_totale >= 800 000,
-//                sinon ROUND(rémunération_totale_sans_panier × 5.5%, 0)
-// AMBIGUÏTÉ SIGNALÉE : le test de seuil porte sur remunerationTotale (avec panier),
-// le calcul de l'assiette sur remunerationTotaleSansPanier — porté tel quel.
+//                sinon ROUND(rémunération_totale_hors_primes_exclues × 5.5%, 0)
+// AMBIGUÏTÉ SIGNALÉE (héritée) : le test de seuil porte sur remunerationTotale (avec panier),
+// le calcul de l'assiette sur remunerationTotaleHorsPrimesExclues — porté tel quel.
+// primeSalissure/primeLait suivent panier : décision produit — même traitement (exclues de
+// l'assiette CNSS, soumises à l'IUTS comme le reste de la rémunération totale).
 function calculerRetenueCNSS(
   remunerationTotale: number,
   remunerationTotaleSansPanier: number,
@@ -405,6 +419,8 @@ function calculerNetAPayer(
 export function calculerBulletinPaie(employe: Employe, elementsVariables: ElementsVariables): BulletinPaie {
   const dateReference = elementsVariables.dateReference ?? new Date();
   const panier = elementsVariables.panier ?? 0; // cf. AMBIGUÏTÉ SIGNALÉE sur "panier"
+  const primeSalissure = elementsVariables.primeSalissure ?? 0;
+  const primeLait = elementsVariables.primeLait ?? 0;
 
   // 1. Proratisation
   const elementsProratises = proraterTousLesElements(employe, elementsVariables.joursPrisEnCompte);
@@ -426,9 +442,11 @@ export function calculerBulletinPaie(employe: Employe, elementsVariables: Elemen
     primeAnciennete,
     elementsVariables.autresIndemnites,
     elementsVariables.heuresSupplementairesForfaitaires,
-    panier
+    panier,
+    primeSalissure,
+    primeLait
   );
-  const remunerationTotaleSansPanier = remunerationTotale - panier;
+  const remunerationTotaleSansPanier = remunerationTotale - panier - primeSalissure - primeLait;
 
   // 5. CNSS
   const retenueCNSS = calculerRetenueCNSS(remunerationTotale, remunerationTotaleSansPanier, employe.declarationCnss);

@@ -55,11 +55,14 @@ export function Paie() {
   const [autresIndemnites, setAutresIndemnites] = useState('0');
   const [avanceAcompte, setAvanceAcompte] = useState('0');
   const [primePanier, setPrimePanier] = useState('0');
+  const [primeSalissure, setPrimeSalissure] = useState('0');
+  const [primeLait, setPrimeLait] = useState('0');
   const [reliquat, setReliquat] = useState('0');
   const [tropPercu, setTropPercu] = useState('0');
   const [joursAbsence, setJoursAbsence] = useState('0');
   const [elementsEnCours, setElementsEnCours] = useState(false);
   const [elementsMessage, setElementsMessage] = useState<string | null>(null);
+  const [elementsErreur, setElementsErreur] = useState<string | null>(null);
 
   // --- Calcul en masse (RH Filiale / DRH / Super Admin) ---
   const [filiales, setFiliales] = useState<Filiale[]>([]);
@@ -111,6 +114,8 @@ export function Paie() {
       setAutresIndemnites(String(parType.get('prime')?.montant ?? 0));
       setAvanceAcompte(String(parType.get('avance')?.montant ?? 0));
       setPrimePanier(String(parType.get('panier')?.montant ?? 0));
+      setPrimeSalissure(String(parType.get('prime_salissure')?.montant ?? 0));
+      setPrimeLait(String(parType.get('prime_lait')?.montant ?? 0));
       setReliquat(String(parType.get('reliquat')?.montant ?? 0));
       setTropPercu(String(parType.get('trop_percu')?.montant ?? 0));
       setJoursAbsence(String(parType.get('absence_injustifiee')?.jours ?? 0));
@@ -125,19 +130,22 @@ export function Paie() {
 
     setElementsEnCours(true);
     setElementsMessage(null);
+    setElementsErreur(null);
     try {
       const periodeIso = `${elementsPeriode}-01`;
       await Promise.all([
         api.enregistrerElementVariable(jeton, { employeId: elementsEmployeId, periode: periodeIso, type: 'prime', montant: Number(autresIndemnites) }),
         api.enregistrerElementVariable(jeton, { employeId: elementsEmployeId, periode: periodeIso, type: 'avance', montant: Number(avanceAcompte) }),
         api.enregistrerElementVariable(jeton, { employeId: elementsEmployeId, periode: periodeIso, type: 'panier', montant: Number(primePanier) }),
+        api.enregistrerElementVariable(jeton, { employeId: elementsEmployeId, periode: periodeIso, type: 'prime_salissure', montant: Number(primeSalissure) }),
+        api.enregistrerElementVariable(jeton, { employeId: elementsEmployeId, periode: periodeIso, type: 'prime_lait', montant: Number(primeLait) }),
         api.enregistrerElementVariable(jeton, { employeId: elementsEmployeId, periode: periodeIso, type: 'reliquat', montant: Number(reliquat) }),
         api.enregistrerElementVariable(jeton, { employeId: elementsEmployeId, periode: periodeIso, type: 'trop_percu', montant: Number(tropPercu) }),
         api.enregistrerElementVariable(jeton, { employeId: elementsEmployeId, periode: periodeIso, type: 'absence_injustifiee', jours: Number(joursAbsence) }),
       ]);
       setElementsMessage('Enregistré — repris automatiquement au prochain calcul (individuel ou en masse).');
     } catch (e) {
-      setErreur(e instanceof ErreurApi ? e.message : "Erreur lors de l'enregistrement des éléments du mois");
+      setElementsErreur(e instanceof ErreurApi ? e.message : "Erreur lors de l'enregistrement des éléments du mois");
     } finally {
       setElementsEnCours(false);
     }
@@ -224,10 +232,15 @@ export function Paie() {
               {resultatMasse.echecs.length > 0 && (
                 <div>
                   <p className="mb-1 font-medium text-alerte-700">{resultatMasse.echecs.length} employé(s) ignoré(s) :</p>
-                  <ul className="list-inside list-disc space-y-0.5 text-slate-600">
+                  <ul className="list-inside list-disc space-y-1 text-slate-600">
                     {resultatMasse.echecs.map((e) => (
                       <li key={e.employeId}>
-                        {e.nom} {e.prenoms} — {e.motif}
+                        {e.nom} {e.prenoms} —{' '}
+                        {e.motif === 'Pointage non validé — paie bloquée' ? (
+                          <Badge couleur="alerte">⚠️ Pointage non validé — paie bloquée</Badge>
+                        ) : (
+                          e.motif
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -292,6 +305,24 @@ export function Paie() {
                   />
                 </div>
                 <div>
+                  <label className={LABEL}>Prime de salissure</label>
+                  <input
+                    type="number"
+                    value={primeSalissure}
+                    onChange={(e) => setPrimeSalissure(e.target.value)}
+                    className={CHAMP}
+                  />
+                </div>
+                <div>
+                  <label className={LABEL}>Prime de lait</label>
+                  <input
+                    type="number"
+                    value={primeLait}
+                    onChange={(e) => setPrimeLait(e.target.value)}
+                    className={CHAMP}
+                  />
+                </div>
+                <div>
                   <label className={LABEL}>Reliquat</label>
                   <input type="number" value={reliquat} onChange={(e) => setReliquat(e.target.value)} className={CHAMP} />
                 </div>
@@ -313,6 +344,7 @@ export function Paie() {
                 {elementsEnCours ? 'Enregistrement...' : 'Enregistrer'}
               </button>
               {elementsMessage && <p className="mt-2 text-xs text-succes-700">{elementsMessage}</p>}
+              {elementsErreur && <p className="mt-2 text-xs text-red-700">{elementsErreur}</p>}
             </>
           )}
         </form>

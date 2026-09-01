@@ -3,6 +3,7 @@ import { RouteProtegee } from './components/RouteProtegee';
 import { FournisseurAuth } from './context/AuthContext';
 import { Absences } from './pages/Absences';
 import { Archivage } from './pages/Archivage';
+import { Attestations } from './pages/Attestations';
 import { Audit } from './pages/Audit';
 import { Conges } from './pages/Conges';
 import { Connexion } from './pages/Connexion';
@@ -35,6 +36,7 @@ export function App() {
             <Route path="/cycle-paie" element={<CyclePaie />} />
             <Route path="/simulateur" element={<Simulateur />} />
             <Route path="/archivage" element={<Archivage />} />
+            <Route path="/attestations" element={<Attestations />} />
             <Route path="/tableaux-de-bord" element={<TableauxDeBord />} />
             <Route path="/audit" element={<Audit />} />
             <Route path="/parametres" element={<Parametres />} />

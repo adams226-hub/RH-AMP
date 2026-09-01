@@ -1,7 +1,7 @@
 import ExcelJS from 'exceljs';
 import { pool } from '../../config/db';
 import { ErreurApplicative } from '../../middleware/gestionErreurs';
-import { calculerMasseSalariale, obtenirParametre } from '../paie/paie.service';
+import { calculerMasseSalariale, obtenirParametre } from '../paie/paie';
 import { CyclePaie, GroupePar, ResumeCyclePaie, StatutCyclePaie } from './cyclesPaie.types';
 
 function mapCycle(l: Record<string, unknown>): CyclePaie {

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import multer from 'multer';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { authentification } from '../../middleware/authentification';
 import { autoriserRoles } from '../../middleware/autorisation';
@@ -10,7 +11,9 @@ import {
   filialesArchiver,
   filialesCreer,
   filialesListe,
+  filialesModifierCoordonnees,
   filialesRenommer,
+  filialesUploaderLogo,
   fonctionsArchiver,
   fonctionsCreer,
   fonctionsListe,
@@ -20,6 +23,8 @@ import {
   servicesListe,
   servicesRenommer,
 } from './postes.controller';
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 export const routesPostes = Router();
 
@@ -34,6 +39,8 @@ routesPostes.get('/filiales', asyncHandler(filialesListe));
 routesPostes.post('/filiales', gestionnairesStructure, asyncHandler(filialesCreer));
 routesPostes.patch('/filiales/:id', gestionnairesStructure, asyncHandler(filialesRenommer));
 routesPostes.post('/filiales/:id/statut', admin, asyncHandler(filialesArchiver));
+routesPostes.patch('/filiales/:id/coordonnees', gestionnairesStructure, asyncHandler(filialesModifierCoordonnees));
+routesPostes.post('/filiales/:id/logo', gestionnairesStructure, upload.single('logo'), asyncHandler(filialesUploaderLogo));
 
 routesPostes.get('/departements', asyncHandler(departementsListe));
 routesPostes.post('/departements', gestionnairesStructure, asyncHandler(departementsCreer));

@@ -3,7 +3,7 @@ export interface CategorieProfessionnelle {
   code: string;
   libelle: string;
   // Pilote l'abattement forfaitaire IUTS du moteur de paie (20% si true / cadre, 25% si false /
-  // non-cadre) — cf. paie.service.ts.
+  // non-cadre) — cf. paie.ts.
   estCadre: boolean;
   actif: boolean;
 }

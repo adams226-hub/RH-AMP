@@ -97,6 +97,17 @@ export function IconePaie(props: Props) {
   );
 }
 
+export function IconeAttestations(props: Props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M6 3h9l3 3v15a1 1 0 01-1 1H6a1 1 0 01-1-1V4a1 1 0 011-1z" />
+      <path d="M15 3v3h3" />
+      <path d="M8 13h8M8 17h5" />
+      <circle cx="9.5" cy="9" r="1.5" />
+    </svg>
+  );
+}
+
 export function IconeArchivage(props: Props) {
   return (
     <svg {...base} {...props}>

@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { ErreurApi, api } from '../api/client';
 import { Badge, CouleurBadge } from '../components/Badge';
 import { EtatVide } from '../components/EtatVide';
@@ -7,8 +7,9 @@ import { MiseEnPage } from '../components/MiseEnPage';
 import { Modale } from '../components/Modale';
 import { SelecteurEmploye } from '../components/SelecteurEmploye';
 import { useAuth } from '../context/AuthContext';
-import { AnomalieAbsence, Chantier, PointageMensuelAvecDetails, StatutPointageMensuel } from '../types/pointage';
+import { AnomalieAbsence, Chantier, CodeAbsencePointage, PointageMensuelAvecDetails, StatutPointageMensuel } from '../types/pointage';
 import { formaterDateFr } from '../utils/date';
+import { construireSemaines, quantiemeDuMois } from '../utils/pointageGrille';
 
 const CHAMP =
   'w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm transition-colors duration-200 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100';
@@ -36,6 +37,22 @@ function moisCourantISO() {
   return new Date().toISOString().slice(0, 7) + '-01';
 }
 
+const LIBELLES_CODE_ABSENCE: Record<CodeAbsencePointage, string> = {
+  absence_injustifiee: 'ABI — Absence injustifiée',
+  repos_medical: 'RM — Repos médical',
+  permission_non_payee: 'PNP — Permission non payée',
+  permission_payee: 'PP — Permission payée',
+  conge_annuel: 'CA — Congé annuel',
+  ferie: 'F — Jour férié (non travaillé)',
+};
+
+interface SaisieJour {
+  heures: string;
+  codeAbsence: CodeAbsencePointage | '';
+}
+
+const JOUR_VIDE: SaisieJour = { heures: '', codeAbsence: '' };
+
 export function Pointage() {
   const { jeton, role } = useAuth();
   const peutSaisir = role !== null && ROLES_SAISIE.includes(role);
@@ -49,15 +66,7 @@ export function Pointage() {
   const [chantierId, setChantierId] = useState('');
   const [periodeDebut, setPeriodeDebut] = useState('');
   const [periodeFin, setPeriodeFin] = useState('');
-  const [heuresHs15, setHeuresHs15] = useState('0');
-  const [heuresHs35, setHeuresHs35] = useState('0');
-  const [heuresHs60, setHeuresHs60] = useState('0');
-  const [joursPanier, setJoursPanier] = useState('0');
-  const [nbAbsenceInjustifiee, setNbAbsenceInjustifiee] = useState('0');
-  const [nbReposMedical, setNbReposMedical] = useState('0');
-  const [nbPermissionNonPayee, setNbPermissionNonPayee] = useState('0');
-  const [nbPermissionPayee, setNbPermissionPayee] = useState('0');
-  const [nbCongeAnnuel, setNbCongeAnnuel] = useState('0');
+  const [jours, setJours] = useState<Record<string, SaisieJour>>({});
   const [ficheCourante, setFicheCourante] = useState<PointageMensuelAvecDetails | null>(null);
   const [envoiEnCours, setEnvoiEnCours] = useState(false);
   const [soumissionEnCours, setSoumissionEnCours] = useState(false);
@@ -95,24 +104,34 @@ export function Pointage() {
     api.obtenirFichePointageEmploye(jeton, employeId, moisPaie).then((fiche) => {
       if (!fiche) {
         setFicheCourante(null);
+        setJours({});
         return;
       }
       setFicheCourante(fiche as unknown as PointageMensuelAvecDetails);
       setChantierId(fiche.chantierId);
-      setPeriodeDebut(fiche.periodeDebut);
-      setHeuresHs15(String(fiche.heuresHs15));
-      setHeuresHs35(String(fiche.heuresHs35));
-      setHeuresHs60(String(fiche.heuresHs60));
-      setJoursPanier(String(fiche.joursPanier));
-      setNbAbsenceInjustifiee(String(fiche.nbJoursAbsenceInjustifiee));
-      setNbReposMedical(String(fiche.nbJoursReposMedical));
-      setNbPermissionNonPayee(String(fiche.nbJoursPermissionNonPayee));
-      setNbPermissionPayee(String(fiche.nbJoursPermissionPayee));
-      setNbCongeAnnuel(String(fiche.nbJoursCongeAnnuel));
+      setPeriodeDebut(fiche.periodeDebut.slice(0, 10));
+      const grille: Record<string, SaisieJour> = {};
+      for (const j of fiche.jours) {
+        grille[j.date.slice(0, 10)] = { heures: j.heures !== null ? String(j.heures) : '', codeAbsence: j.codeAbsence ?? '' };
+      }
+      setJours(grille);
     });
   }
 
   useEffect(chargerFicheExistante, [jeton, employeId, periodeFin]);
+
+  const semaines = useMemo(
+    () => (periodeDebut && periodeFin ? construireSemaines(periodeDebut, periodeFin) : []),
+    [periodeDebut, periodeFin]
+  );
+
+  function definirHeures(date: string, valeur: string) {
+    setJours((j) => ({ ...j, [date]: { heures: valeur, codeAbsence: valeur ? '' : (j[date]?.codeAbsence ?? '') } }));
+  }
+
+  function definirCodeAbsence(date: string, valeur: CodeAbsencePointage | '') {
+    setJours((j) => ({ ...j, [date]: { heures: valeur ? '' : (j[date]?.heures ?? ''), codeAbsence: valeur } }));
+  }
 
   async function enregistrer(evenement: FormEvent) {
     evenement.preventDefault();
@@ -121,20 +140,19 @@ export function Pointage() {
     setEnvoiEnCours(true);
     setErreur(null);
     try {
+      const joursSaisis = Object.entries(jours)
+        .filter(([, j]) => j.heures !== '' || j.codeAbsence !== '')
+        .map(([date, j]) => ({
+          date,
+          heures: j.heures !== '' ? Number(j.heures) : undefined,
+          codeAbsence: j.codeAbsence !== '' ? j.codeAbsence : undefined,
+        }));
       await api.enregistrerFichePointage(jeton, {
         employeId,
         chantierId,
         periodeDebut,
         periodeFin,
-        heuresHs15: Number(heuresHs15),
-        heuresHs35: Number(heuresHs35),
-        heuresHs60: Number(heuresHs60),
-        joursPanier: Number(joursPanier),
-        nbJoursAbsenceInjustifiee: Number(nbAbsenceInjustifiee),
-        nbJoursReposMedical: Number(nbReposMedical),
-        nbJoursPermissionNonPayee: Number(nbPermissionNonPayee),
-        nbJoursPermissionPayee: Number(nbPermissionPayee),
-        nbJoursCongeAnnuel: Number(nbCongeAnnuel),
+        jours: joursSaisis,
       });
       chargerFicheExistante();
     } catch (e) {
@@ -319,47 +337,104 @@ export function Pointage() {
             </div>
           </div>
 
-          <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div>
-              <label className={LABEL}>Heures sup 15%</label>
-              <input type="number" min="0" max="744" value={heuresHs15} onChange={(e) => setHeuresHs15(e.target.value)} className={CHAMP} />
+          {semaines.length > 0 && (
+            <div className="mb-3">
+              <label className={LABEL}>Grille journalière — heures travaillées ou code d'absence</label>
+              <div className="overflow-x-auto rounded-md border border-slate-200">
+                <table className="w-full min-w-[760px] text-xs">
+                  <thead>
+                    <tr className="bg-slate-50 text-left text-slate-500">
+                      {['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'].map((libelle) => (
+                        <th key={libelle} className="px-1.5 py-1.5 font-medium">
+                          {libelle}
+                        </th>
+                      ))}
+                      <th className="px-1.5 py-1.5 text-center font-medium">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {semaines.map((semaine, i) => {
+                      const totalSemaine = semaine.reduce(
+                        (s, date) => s + (date && jours[date]?.heures ? Number(jours[date].heures) : 0),
+                        0
+                      );
+                      return (
+                        <tr key={i}>
+                          {semaine.map((date, j) => (
+                            <td key={j} className="px-1.5 py-1 align-top">
+                              {date && (
+                                <div className="space-y-0.5">
+                                  <div className="text-[10px] text-slate-400">{quantiemeDuMois(date)}</div>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="24"
+                                    step="0.5"
+                                    placeholder="h"
+                                    value={jours[date]?.heures ?? ''}
+                                    onChange={(e) => definirHeures(date, e.target.value)}
+                                    className="w-14 rounded border border-slate-300 px-1 py-0.5 text-xs focus:border-primary-500 focus:outline-none"
+                                  />
+                                  <select
+                                    value={jours[date]?.codeAbsence ?? ''}
+                                    onChange={(e) => definirCodeAbsence(date, e.target.value as CodeAbsencePointage | '')}
+                                    className="w-full rounded border border-slate-300 px-1 py-0.5 text-[10px] focus:border-primary-500 focus:outline-none"
+                                  >
+                                    <option value="">—</option>
+                                    {(Object.keys(LIBELLES_CODE_ABSENCE) as CodeAbsencePointage[]).map((code) => (
+                                      <option key={code} value={code}>
+                                        {LIBELLES_CODE_ABSENCE[code]}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              )}
+                            </td>
+                          ))}
+                          <td className="px-1.5 py-1 text-center font-medium text-slate-700">{totalSemaine || ''}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
-            <div>
-              <label className={LABEL}>Heures sup 35%</label>
-              <input type="number" min="0" max="744" value={heuresHs35} onChange={(e) => setHeuresHs35(e.target.value)} className={CHAMP} />
-            </div>
-            <div>
-              <label className={LABEL}>Heures sup 60%</label>
-              <input type="number" min="0" max="744" value={heuresHs60} onChange={(e) => setHeuresHs60(e.target.value)} className={CHAMP} />
-            </div>
-            <div>
-              <label className={LABEL}>Jours panier</label>
-              <input type="number" min="0" max="31" value={joursPanier} onChange={(e) => setJoursPanier(e.target.value)} className={CHAMP} />
-            </div>
-          </div>
+          )}
 
-          <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-5">
-            <div>
-              <label className={LABEL}>Absence injustifiée</label>
-              <input type="number" min="0" max="31" value={nbAbsenceInjustifiee} onChange={(e) => setNbAbsenceInjustifiee(e.target.value)} className={CHAMP} />
+          {ficheCourante && (
+            <div className="mb-1 grid grid-cols-2 gap-x-4 gap-y-1 rounded-md bg-slate-50 p-3 text-xs text-slate-600 sm:grid-cols-4">
+              <p>
+                HS 15% : <span className="font-medium text-slate-800">{ficheCourante.heuresHs15} h</span>
+              </p>
+              <p>
+                HS 35% : <span className="font-medium text-slate-800">{ficheCourante.heuresHs35} h</span>
+              </p>
+              <p>
+                HS 60% : <span className="font-medium text-slate-800">{ficheCourante.heuresHs60} h</span>
+              </p>
+              <p>
+                Jours panier : <span className="font-medium text-slate-800">{ficheCourante.joursPanier}</span>
+              </p>
+              <p>
+                Absence injustifiée : <span className="font-medium text-slate-800">{ficheCourante.nbJoursAbsenceInjustifiee} j</span>
+              </p>
+              <p>
+                Repos médical : <span className="font-medium text-slate-800">{ficheCourante.nbJoursReposMedical} j</span>
+              </p>
+              <p>
+                Permission non payée : <span className="font-medium text-slate-800">{ficheCourante.nbJoursPermissionNonPayee} j</span>
+              </p>
+              <p>
+                Permission payée : <span className="font-medium text-slate-800">{ficheCourante.nbJoursPermissionPayee} j</span>
+              </p>
+              <p>
+                Congé annuel : <span className="font-medium text-slate-800">{ficheCourante.nbJoursCongeAnnuel} j</span>
+              </p>
             </div>
-            <div>
-              <label className={LABEL}>Repos médical</label>
-              <input type="number" min="0" max="31" value={nbReposMedical} onChange={(e) => setNbReposMedical(e.target.value)} className={CHAMP} />
-            </div>
-            <div>
-              <label className={LABEL}>Permission non payée</label>
-              <input type="number" min="0" max="31" value={nbPermissionNonPayee} onChange={(e) => setNbPermissionNonPayee(e.target.value)} className={CHAMP} />
-            </div>
-            <div>
-              <label className={LABEL}>Permission payée</label>
-              <input type="number" min="0" max="31" value={nbPermissionPayee} onChange={(e) => setNbPermissionPayee(e.target.value)} className={CHAMP} />
-            </div>
-            <div>
-              <label className={LABEL}>Congé annuel</label>
-              <input type="number" min="0" max="31" value={nbCongeAnnuel} onChange={(e) => setNbCongeAnnuel(e.target.value)} className={CHAMP} />
-            </div>
-          </div>
+          )}
+          <p className="mb-3 text-[11px] text-slate-400">
+            Heures sup., panier et absences sont calculés automatiquement depuis la grille, après enregistrement.
+          </p>
 
           <div className="flex gap-3">
             <button disabled={envoiEnCours} className={BOUTON}>

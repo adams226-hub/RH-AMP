@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
+import { ErreurApplicative } from '../../middleware/gestionErreurs';
 import {
   archiverDepartement,
   archiverFiliale,
@@ -9,10 +10,12 @@ import {
   creerFiliale,
   creerFonction,
   creerService,
+  enregistrerLogoFiliale,
   listerDepartements,
   listerFiliales,
   listerFonctions,
   listerServices,
+  modifierCoordonneesFiliale,
   renommerDepartement,
   renommerFiliale,
   renommerFonction,
@@ -42,6 +45,15 @@ const schemaCreationFonction = z.object({
   description: z.string().optional(),
 });
 
+const schemaCoordonneesFiliale = z.object({
+  adresse: z.string().optional(),
+  rccm: z.string().optional(),
+  ifu: z.string().optional(),
+  telephone: z.string().optional(),
+  siteWeb: z.string().optional(),
+  couleurAccent: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Couleur hexadécimale attendue, ex. #E8622C').optional(),
+});
+
 const schemaRenommer = z.object({ nom: z.string().min(1) });
 const schemaRenommerFonction = z.object({ intitule: z.string().min(1) });
 const schemaStatut = z.object({ actif: z.boolean() });
@@ -67,6 +79,18 @@ export async function filialesRenommer(req: Request, res: Response) {
 export async function filialesArchiver(req: Request, res: Response) {
   const { actif } = schemaStatut.parse(req.body);
   res.json(await archiverFiliale(req.params.id, actif));
+}
+
+export async function filialesModifierCoordonnees(req: Request, res: Response) {
+  const donnees = schemaCoordonneesFiliale.parse(req.body);
+  res.json(await modifierCoordonneesFiliale(req.params.id, donnees));
+}
+
+export async function filialesUploaderLogo(req: Request, res: Response) {
+  if (!req.file) {
+    throw new ErreurApplicative(400, 'Aucun fichier reçu (champ "logo" attendu)');
+  }
+  res.json(await enregistrerLogoFiliale(req.params.id, { buffer: req.file.buffer, mimetype: req.file.mimetype }));
 }
 
 export async function departementsListe(req: Request, res: Response) {

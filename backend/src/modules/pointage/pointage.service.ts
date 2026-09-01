@@ -1,7 +1,9 @@
+import { PoolClient } from 'pg';
 import { pool } from '../../config/db';
 import { ErreurApplicative } from '../../middleware/gestionErreurs';
 import { verifierCycleOuvertPourEmploye } from '../cyclesPaie/verrouCycle';
 import { CodeRole } from '../auth/auth.types';
+import { calculerPointageDepuisJours } from './pointage.calcul';
 import {
   AnomalieAbsence,
   Chantier,
@@ -190,8 +192,61 @@ export async function listerFiches(
   }));
 }
 
+// Charge les jours fériés (nationaux ou propres à la filiale du chantier) couvrant la période,
+// pour la règle H60% (dimanche/férié) — cf. calculerPointageDepuisJours.
+async function chargerJoursFeries(client: PoolClient, chantierId: string, debut: string, fin: string): Promise<Set<string>> {
+  const { rows } = await client.query(
+    `SELECT jf.date FROM jours_feries jf
+     JOIN chantiers c ON c.id = $1
+     WHERE (jf.filiale_id IS NULL OR jf.filiale_id = c.filiale_id) AND jf.date BETWEEN $2 AND $3`,
+    [chantierId, debut, fin]
+  );
+  return new Set(rows.map((r) => r.date as string));
+}
+
+// Recalcule heures_hs_15/35/60, jours_panier et les 5 compteurs d'absence depuis le détail
+// journalier actuel (pointages_jours) et les répercute sur la fiche — aucune de ces valeurs ne
+// se saisit plus manuellement (cf. pointage.calcul.ts).
+async function recalculerEtEnregistrerTotaux(client: PoolClient, fiche: PointageMensuel): Promise<PointageMensuel> {
+  const { rows: joursRows } = await client.query(
+    'SELECT date, heures, code_absence FROM pointages_jours WHERE pointage_mensuel_id = $1',
+    [fiche.id]
+  );
+  const jours = joursRows.map((j) => ({
+    date: j.date as string,
+    heures: j.heures !== null ? Number(j.heures) : null,
+    codeAbsence: j.code_absence as CodeAbsencePointage | null,
+  }));
+
+  const joursFeries = await chargerJoursFeries(client, fiche.chantierId, fiche.periodeDebut, fiche.periodeFin);
+  const totaux = calculerPointageDepuisJours(jours, joursFeries);
+
+  const { rows } = await client.query(
+    `UPDATE pointages_mensuels SET
+       heures_hs_15 = $2, heures_hs_35 = $3, heures_hs_60 = $4, jours_panier = $5,
+       nb_jours_absence_injustifiee = $6, nb_jours_repos_medical = $7, nb_jours_permission_non_payee = $8,
+       nb_jours_permission_payee = $9, nb_jours_conge_annuel = $10, updated_at = now()
+     WHERE id = $1 RETURNING *`,
+    [
+      fiche.id,
+      totaux.heuresHs15,
+      totaux.heuresHs35,
+      totaux.heuresHs60,
+      totaux.joursPanier,
+      totaux.nbJoursAbsenceInjustifiee,
+      totaux.nbJoursReposMedical,
+      totaux.nbJoursPermissionNonPayee,
+      totaux.nbJoursPermissionPayee,
+      totaux.nbJoursCongeAnnuel,
+    ]
+  );
+  return mapPointageMensuel(rows[0]);
+}
+
 // Crée ou met à jour la fiche du mois (brouillon uniquement — un rejet repasse aussi en
-// brouillon pour permettre la correction). Upsert des jours fournis en plus des totaux.
+// brouillon pour permettre la correction). `jours`, s'il est fourni, remplace intégralement le
+// détail journalier de la période (les dates absentes du tableau sont supprimées) ; les totaux
+// (heures sup, panier, absences) sont ensuite recalculés automatiquement depuis ce détail.
 export async function enregistrerFiche(donnees: SaisiePointageMensuel): Promise<PointageMensuel> {
   const moisPaie = moisPaieDepuisPeriodeFin(donnees.periodeFin);
 
@@ -209,43 +264,25 @@ export async function enregistrerFiche(donnees: SaisiePointageMensuel): Promise<
     }
 
     const { rows } = await client.query(
-      `INSERT INTO pointages_mensuels (
-         employe_id, chantier_id, periode_debut, periode_fin, mois_paie,
-         heures_hs_15, heures_hs_35, heures_hs_60, jours_panier,
-         nb_jours_absence_injustifiee, nb_jours_repos_medical, nb_jours_permission_non_payee,
-         nb_jours_permission_payee, nb_jours_conge_annuel, statut
-       ) VALUES ($1, $2, $3, $4, date_trunc('month', $4::date), $5, $6, $7, $8, $9, $10, $11, $12, $13, 'brouillon')
+      `INSERT INTO pointages_mensuels (employe_id, chantier_id, periode_debut, periode_fin, mois_paie, statut)
+       VALUES ($1, $2, $3, $4, date_trunc('month', $4::date), 'brouillon')
        ON CONFLICT (employe_id, mois_paie) DO UPDATE SET
          chantier_id = EXCLUDED.chantier_id, periode_debut = EXCLUDED.periode_debut, periode_fin = EXCLUDED.periode_fin,
-         heures_hs_15 = EXCLUDED.heures_hs_15, heures_hs_35 = EXCLUDED.heures_hs_35, heures_hs_60 = EXCLUDED.heures_hs_60,
-         jours_panier = EXCLUDED.jours_panier,
-         nb_jours_absence_injustifiee = EXCLUDED.nb_jours_absence_injustifiee,
-         nb_jours_repos_medical = EXCLUDED.nb_jours_repos_medical,
-         nb_jours_permission_non_payee = EXCLUDED.nb_jours_permission_non_payee,
-         nb_jours_permission_payee = EXCLUDED.nb_jours_permission_payee,
-         nb_jours_conge_annuel = EXCLUDED.nb_jours_conge_annuel,
          statut = 'brouillon', commentaire_rejet = NULL, updated_at = now()
        RETURNING *`,
-      [
-        donnees.employeId,
-        donnees.chantierId,
-        donnees.periodeDebut,
-        donnees.periodeFin,
-        donnees.heuresHs15 ?? 0,
-        donnees.heuresHs35 ?? 0,
-        donnees.heuresHs60 ?? 0,
-        donnees.joursPanier ?? 0,
-        donnees.nbJoursAbsenceInjustifiee ?? 0,
-        donnees.nbJoursReposMedical ?? 0,
-        donnees.nbJoursPermissionNonPayee ?? 0,
-        donnees.nbJoursPermissionPayee ?? 0,
-        donnees.nbJoursCongeAnnuel ?? 0,
-      ]
+      [donnees.employeId, donnees.chantierId, donnees.periodeDebut, donnees.periodeFin]
     );
 
-    const fiche = mapPointageMensuel(rows[0]);
+    let fiche = mapPointageMensuel(rows[0]);
 
-    if (donnees.jours && donnees.jours.length > 0) {
+    if (donnees.jours) {
+      const datesFournies = donnees.jours.map((j) => j.date);
+      await client.query(
+        `DELETE FROM pointages_jours
+         WHERE pointage_mensuel_id = $1 AND date BETWEEN $2 AND $3 AND date <> ALL($4::date[])`,
+        [fiche.id, fiche.periodeDebut, fiche.periodeFin, datesFournies]
+      );
+
       for (const jour of donnees.jours) {
         await client.query(
           `INSERT INTO pointages_jours (pointage_mensuel_id, date, heures, code_absence)
@@ -255,6 +292,8 @@ export async function enregistrerFiche(donnees: SaisiePointageMensuel): Promise<
         );
       }
     }
+
+    fiche = await recalculerEtEnregistrerTotaux(client, fiche);
 
     await client.query('COMMIT');
     return fiche;

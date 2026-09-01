@@ -3,7 +3,26 @@ export interface Filiale {
   nom: string;
   ville: string | null;
   pays: string;
+  // Coordonnées légales affichées en pied de bulletin de paie — une valeur par filiale.
+  adresse: string | null;
+  rccm: string | null;
+  ifu: string | null;
+  telephone: string | null;
+  siteWeb: string | null;
+  logoUrl: string | null;
+  // Hex ('#RRGGBB'), couleur dominante du logo — bandeau/pied de page des attestations (cf.
+  // attestations.pdf.ts) ; null = gris neutre par défaut.
+  couleurAccent: string | null;
   actif: boolean;
+}
+
+export interface CoordonneesLegalesFiliale {
+  adresse?: string;
+  rccm?: string;
+  ifu?: string;
+  telephone?: string;
+  siteWeb?: string;
+  couleurAccent?: string;
 }
 
 export interface Departement {

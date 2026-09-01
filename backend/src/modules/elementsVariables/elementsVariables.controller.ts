@@ -12,7 +12,10 @@ import {
 const schemaSaisie = z.object({
   employeId: z.string().uuid(),
   periode: z.string(),
-  type: z.enum(['prime', 'avance', 'panier', 'reliquat', 'absence_injustifiee', 'trop_percu', 'heure_sup_50', 'heure_sup_120']),
+  type: z.enum([
+    'prime', 'avance', 'panier', 'reliquat', 'absence_injustifiee', 'trop_percu',
+    'heure_sup_50', 'heure_sup_120', 'prime_salissure', 'prime_lait',
+  ]),
   montant: z.number().nonnegative().optional(),
   jours: z.number().nonnegative().optional(),
 });

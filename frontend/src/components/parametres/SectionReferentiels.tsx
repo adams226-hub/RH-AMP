@@ -27,6 +27,10 @@ function SectionFiliales() {
   const [erreur, setErreur] = useState<string | null>(null);
   const [nom, setNom] = useState('');
   const [edition, setEdition] = useState<{ id: string; valeur: string } | null>(null);
+  const [coordEnEdition, setCoordEnEdition] = useState<string | null>(null);
+  const [formCoord, setFormCoord] = useState({ adresse: '', rccm: '', ifu: '', telephone: '', siteWeb: '', couleurAccent: '#94a3b8' });
+  const [coordEnCours, setCoordEnCours] = useState(false);
+  const [logoEnCours, setLogoEnCours] = useState<string | null>(null);
 
   function rafraichir() {
     if (!jeton) return;
@@ -68,45 +72,179 @@ function SectionFiliales() {
     }
   }
 
+  function ouvrirCoordonnees(f: Filiale) {
+    setCoordEnEdition(f.id);
+    setFormCoord({
+      adresse: f.adresse ?? '',
+      rccm: f.rccm ?? '',
+      ifu: f.ifu ?? '',
+      telephone: f.telephone ?? '',
+      siteWeb: f.siteWeb ?? '',
+      couleurAccent: f.couleurAccent ?? '#94a3b8',
+    });
+  }
+
+  async function enregistrerCoordonnees(evenement: FormEvent) {
+    evenement.preventDefault();
+    if (!jeton || !coordEnEdition) return;
+    setCoordEnCours(true);
+    try {
+      await api.modifierCoordonneesFiliale(jeton, coordEnEdition, formCoord);
+      setCoordEnEdition(null);
+      rafraichir();
+    } catch (e) {
+      setErreur(e instanceof ErreurApi ? e.message : "Erreur lors de l'enregistrement des coordonnées");
+    } finally {
+      setCoordEnCours(false);
+    }
+  }
+
+  async function uploaderLogo(f: Filiale, fichier: File) {
+    if (!jeton) return;
+    setLogoEnCours(f.id);
+    try {
+      await api.uploaderLogoFiliale(jeton, f.id, fichier);
+      rafraichir();
+    } catch (e) {
+      setErreur(e instanceof ErreurApi ? e.message : "Erreur lors de l'envoi du logo");
+    } finally {
+      setLogoEnCours(null);
+    }
+  }
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <h3 className="mb-3 text-sm font-semibold text-slate-800">Filiales</h3>
       {erreur && <div className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{erreur}</div>}
-      <ul className="mb-3 max-h-64 space-y-1.5 overflow-y-auto text-sm text-slate-700">
+      <ul className="mb-3 max-h-80 space-y-1.5 overflow-y-auto text-sm text-slate-700">
         {filiales.map((f) => (
-          <li key={f.id} className="flex items-center justify-between gap-2">
-            {edition?.id === f.id ? (
-              <div className="flex flex-1 gap-1.5">
-                <input
-                  value={edition.valeur}
-                  onChange={(e) => setEdition({ id: f.id, valeur: e.target.value })}
-                  className={`flex-1 ${CHAMP}`}
-                  autoFocus
-                />
-                <button onClick={valider} className={LIEN}>
-                  OK
-                </button>
-                <button onClick={() => setEdition(null)} className="text-xs text-slate-400 hover:text-slate-600">
-                  Annuler
-                </button>
-              </div>
-            ) : (
-              <>
-                <span className={f.actif ? '' : 'text-slate-400'}>{f.nom}</span>
-                <span className="flex shrink-0 items-center gap-2">
-                  <BadgeActif actif={f.actif} />
-                  {peutGerer && (
-                    <button onClick={() => setEdition({ id: f.id, valeur: f.nom })} className={LIEN}>
-                      Renommer
-                    </button>
-                  )}
-                  {peutArchiver && (
-                    <button onClick={() => basculer(f)} className="text-xs text-slate-500 hover:underline">
-                      {f.actif ? 'Archiver' : 'Réactiver'}
-                    </button>
-                  )}
-                </span>
-              </>
+          <li key={f.id}>
+            <div className="flex items-center justify-between gap-2">
+              {edition?.id === f.id ? (
+                <div className="flex flex-1 gap-1.5">
+                  <input
+                    value={edition.valeur}
+                    onChange={(e) => setEdition({ id: f.id, valeur: e.target.value })}
+                    className={`flex-1 ${CHAMP}`}
+                    autoFocus
+                  />
+                  <button onClick={valider} className={LIEN}>
+                    OK
+                  </button>
+                  <button onClick={() => setEdition(null)} className="text-xs text-slate-400 hover:text-slate-600">
+                    Annuler
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <span className={f.actif ? '' : 'text-slate-400'}>{f.nom}</span>
+                  <span className="flex shrink-0 items-center gap-2">
+                    <BadgeActif actif={f.actif} />
+                    {peutGerer && (
+                      <button onClick={() => setEdition({ id: f.id, valeur: f.nom })} className={LIEN}>
+                        Renommer
+                      </button>
+                    )}
+                    {peutGerer && (
+                      <button
+                        onClick={() => (coordEnEdition === f.id ? setCoordEnEdition(null) : ouvrirCoordonnees(f))}
+                        className={LIEN}
+                      >
+                        {coordEnEdition === f.id ? 'Fermer' : 'Coordonnées'}
+                      </button>
+                    )}
+                    {peutArchiver && (
+                      <button onClick={() => basculer(f)} className="text-xs text-slate-500 hover:underline">
+                        {f.actif ? 'Archiver' : 'Réactiver'}
+                      </button>
+                    )}
+                  </span>
+                </>
+              )}
+            </div>
+
+            {coordEnEdition === f.id && (
+              <form onSubmit={enregistrerCoordonnees} className="mt-2 grid grid-cols-2 gap-2 rounded-md bg-slate-50 p-3">
+                <div className="col-span-2">
+                  <label className="mb-1 block text-xs text-slate-500">Adresse</label>
+                  <input
+                    value={formCoord.adresse}
+                    onChange={(e) => setFormCoord({ ...formCoord, adresse: e.target.value })}
+                    placeholder="04 BP 8704 Ouagadougou 04"
+                    className={`w-full ${CHAMP}`}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-slate-500">RCCM</label>
+                  <input
+                    value={formCoord.rccm}
+                    onChange={(e) => setFormCoord({ ...formCoord, rccm: e.target.value })}
+                    className={`w-full ${CHAMP}`}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-slate-500">IFU</label>
+                  <input
+                    value={formCoord.ifu}
+                    onChange={(e) => setFormCoord({ ...formCoord, ifu: e.target.value })}
+                    className={`w-full ${CHAMP}`}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-slate-500">Téléphone</label>
+                  <input
+                    value={formCoord.telephone}
+                    onChange={(e) => setFormCoord({ ...formCoord, telephone: e.target.value })}
+                    className={`w-full ${CHAMP}`}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-slate-500">Site web</label>
+                  <input
+                    value={formCoord.siteWeb}
+                    onChange={(e) => setFormCoord({ ...formCoord, siteWeb: e.target.value })}
+                    className={`w-full ${CHAMP}`}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-slate-500">Couleur d'accent (bandeau/pied de page des attestations)</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={formCoord.couleurAccent}
+                      onChange={(e) => setFormCoord({ ...formCoord, couleurAccent: e.target.value })}
+                      className="h-8 w-10 cursor-pointer rounded border border-slate-300"
+                    />
+                    <input
+                      value={formCoord.couleurAccent}
+                      onChange={(e) => setFormCoord({ ...formCoord, couleurAccent: e.target.value })}
+                      className={`w-full ${CHAMP}`}
+                    />
+                  </div>
+                </div>
+                <div className="col-span-2 flex items-center gap-3 border-t border-slate-200 pt-2">
+                  <label className="text-xs text-slate-500">
+                    Logo {f.logoUrl ? <span className="text-succes-700">— déjà déposé</span> : <span className="text-slate-400">— aucun</span>}
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg"
+                    disabled={logoEnCours === f.id}
+                    onChange={(e) => {
+                      const fichier = e.target.files?.[0];
+                      if (fichier) uploaderLogo(f, fichier);
+                      e.target.value = '';
+                    }}
+                    className="text-xs text-slate-600"
+                  />
+                  {logoEnCours === f.id && <span className="text-xs text-slate-400">Envoi...</span>}
+                </div>
+                <div className="col-span-2">
+                  <button disabled={coordEnCours} className={BOUTON}>
+                    {coordEnCours ? 'Enregistrement...' : 'Enregistrer les coordonnées'}
+                  </button>
+                </div>
+              </form>
             )}
           </li>
         ))}

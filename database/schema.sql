@@ -36,7 +36,8 @@ CREATE TYPE statut_cycle_paie AS ENUM ('ouvert', 'calcule', 'verifie', 'exporte'
 -- (chantier) ; 50/120 restent des cas exceptionnels saisis à la main dans Éléments du mois.
 CREATE TYPE type_element_variable AS ENUM (
     'heure_sup', 'prime', 'avance', 'absence_injustifiee', 'panier', 'reliquat', 'trop_percu',
-    'heure_sup_15', 'heure_sup_35', 'heure_sup_50', 'heure_sup_60', 'heure_sup_120'
+    'heure_sup_15', 'heure_sup_35', 'heure_sup_50', 'heure_sup_60', 'heure_sup_120',
+    'prime_salissure', 'prime_lait'
 );
 
 CREATE TYPE categorie_document AS ENUM ('contrat', 'cnib', 'diplome', 'certificat', 'permis', 'document_administratif', 'bulletin_paie', 'autre');
@@ -50,19 +51,30 @@ CREATE TYPE statut_pointage AS ENUM ('saisi', 'valide');
 -- ============================================================================
 
 -- actif = soft delete (même principe que departements/services/fonctions, cf. module Postes) —
--- gérée depuis Paramètres > Référentiels.
+-- gérée depuis Paramètres > Référentiels. adresse/rccm/ifu/telephone/site_web : coordonnées
+-- légales affichées en pied de bulletin de paie — une valeur par filiale (entités juridiques
+-- distinctes), pas une seule pour le groupe.
 CREATE TABLE filiales (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     nom         TEXT NOT NULL,
     ville       TEXT,
     pays        TEXT NOT NULL DEFAULT 'Burkina Faso',
+    adresse     TEXT,
+    rccm        TEXT,
+    ifu         TEXT,
+    telephone   TEXT,
+    site_web    TEXT,
+    logo_url    TEXT, -- chemin dans le bucket Supabase Storage "logos" (pas d'URL publique — logo
+                       -- récupéré côté serveur pour être incorporé dans le PDF du bulletin)
+    couleur_accent  TEXT, -- hex ('#RRGGBB'), couleur dominante du logo — bandeau/pied de page des
+                           -- attestations (cf. attestations.pdf.ts) ; NULL = gris neutre par défaut
     actif       BOOLEAN NOT NULL DEFAULT true,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- Remplace l'ancien ENUM categorie_professionnelle (figé, non éditable) — table gérée depuis
 -- Paramètres > Référentiels. est_cadre pilote directement l'abattement forfaitaire IUTS (20% si
--- true / cadre, 25% si false / non-cadre) : le moteur de paie (paie.service.ts) lit ce champ au
+-- true / cadre, 25% si false / non-cadre) : le moteur de paie (paie.ts) lit ce champ au
 -- lieu de tester la chaîne "cadre" en dur. employes.categorie_professionnelle référence `code`
 -- (pas `id`) pour rester une simple colonne TEXT, sans changer sa nature dans les autres modules
 -- qui la lisent déjà (cyclesPaie, tableauxDeBord, pointage.pdf) sans jointure.
@@ -593,7 +605,14 @@ CREATE TABLE bulletins_paie (
     anciennete_annees        INTEGER NOT NULL DEFAULT 0,
     prime_anciennete         NUMERIC(12,2) NOT NULL DEFAULT 0,
     heures_supplementaires   NUMERIC(12,2) NOT NULL DEFAULT 0, -- montant forfaitaire, cf. ElementsVariables.heuresSupplementairesForfaitaires
+    hs_15                    NUMERIC(12,2) NOT NULL DEFAULT 0, -- détail par taux, pour l'affichage fidèle du nouveau modèle de bulletin
+    hs_35                    NUMERIC(12,2) NOT NULL DEFAULT 0,
+    hs_50                    NUMERIC(12,2) NOT NULL DEFAULT 0,
+    hs_60                    NUMERIC(12,2) NOT NULL DEFAULT 0,
+    hs_120                   NUMERIC(12,2) NOT NULL DEFAULT 0,
     prime_panier             NUMERIC(12,2) NOT NULL DEFAULT 0,
+    prime_salissure          NUMERIC(12,2) NOT NULL DEFAULT 0, -- même traitement fiscal/social que prime_panier (exclue de l'assiette CNSS, soumise à l'IUTS)
+    prime_lait               NUMERIC(12,2) NOT NULL DEFAULT 0, -- idem prime_salissure
     autres_indemnites        NUMERIC(12,2) NOT NULL DEFAULT 0,
     avance_acompte           NUMERIC(12,2) NOT NULL DEFAULT 0,
     reliquat                 NUMERIC(12,2) NOT NULL DEFAULT 0,
@@ -674,3 +693,63 @@ CREATE TABLE journal_audit (
 
 CREATE INDEX idx_journal_audit_utilisateur ON journal_audit(utilisateur_id);
 CREATE INDEX idx_journal_audit_module ON journal_audit(module, created_at);
+
+-- ============================================================================
+-- 10. ATTESTATIONS (module Attestations) — SPEC_MODULE_ATTESTATIONS_AMP.md
+-- ============================================================================
+
+-- Champs nécessaires à l'Attestation de travail déjà présents sur employes : date_naissance,
+-- lieu_naissance, num_cnib (réutilisé comme numéro de pièce d'identité) — aucune migration
+-- employes nécessaire (vérifié avant construction de ce module).
+
+-- Extension employes pour les stagiaires (contrat actif de type 'stage') — pas de référentiel
+-- "Stagiaires" séparé côté LOGICIEL_SALAIRES.xlsm repris ici : filière/établissement/superviseur
+-- sont propres au stage, mais dates de stage et service d'affectation ne sont PAS dupliqués ici —
+-- réutilisés depuis le contrat actif (contrats.date_debut/date_fin) et employes.service_id.
+CREATE TABLE stagiaires (
+    employe_id       UUID PRIMARY KEY REFERENCES employes(id) ON DELETE CASCADE,
+    filiere_etudes   TEXT,
+    etablissement    TEXT,
+    superviseur_id   UUID REFERENCES employes(id) ON DELETE SET NULL,
+
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TYPE type_attestation AS ENUM ('att_trav', 'cert_trav', 'att_stage');
+
+-- Contrairement aux documents uploadés (section 8, table `documents` / Supabase Storage), une
+-- attestation est générée depuis des données structurées et régénérée à la demande en PDF (même
+-- principe que bulletins_paie / pointages_mensuels) — pas de fichier stocké. `donnees` fige tout
+-- ce qui a été effectivement affiché sur le document au moment de la génération, y compris les
+-- personnalisations faites dans l'aperçu (ex. description des missions de stage, motif de
+-- départ) — jamais recalculé depuis la fiche employé après coup, non modifiable ensuite.
+CREATE TABLE attestations (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    type            type_attestation NOT NULL,
+    numero          INT NOT NULL,
+    filiale_id      UUID NOT NULL REFERENCES filiales(id) ON DELETE RESTRICT,
+    annee           INT NOT NULL,
+    employe_id      UUID NOT NULL REFERENCES employes(id) ON DELETE RESTRICT,
+    date_emission   DATE NOT NULL DEFAULT CURRENT_DATE,
+    emis_par        UUID REFERENCES utilisateurs(id) ON DELETE SET NULL,
+    donnees         JSONB NOT NULL,
+
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    UNIQUE (type, filiale_id, annee, numero)
+);
+
+CREATE INDEX idx_attestations_employe ON attestations(employe_id);
+
+-- Compteur atomique par (type, filiale, année), remis à 1 chaque année civile — un simple
+-- MAX(numero)+1 sur `attestations` serait sujet à collision sous accès concurrent (deux RH qui
+-- génèrent au même instant pour la même filiale) ; l'UPSERT sur ce compteur est atomique.
+CREATE TABLE compteurs_attestations (
+    type            type_attestation NOT NULL,
+    filiale_id      UUID NOT NULL REFERENCES filiales(id) ON DELETE CASCADE,
+    annee           INT NOT NULL,
+    dernier_numero  INT NOT NULL DEFAULT 0,
+
+    PRIMARY KEY (type, filiale_id, annee)
+);

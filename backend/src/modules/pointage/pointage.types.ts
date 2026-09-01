@@ -62,20 +62,14 @@ export interface PointageMensuelAvecDetails extends PointageMensuel {
   filialeId: string;
 }
 
+// Heures sup (15/35/60%), jours panier et compteurs d'absence ne se saisissent plus directement —
+// ils sont recalculés automatiquement depuis `jours` par calculerPointageDepuisJours (cf.
+// pointage.calcul.ts, règles fournies par l'utilisateur/CARTE_POINTAGE, jamais inventées).
 export interface SaisiePointageMensuel {
   employeId: string;
   chantierId: string;
   periodeDebut: string;
   periodeFin: string;
-  heuresHs15?: number;
-  heuresHs35?: number;
-  heuresHs60?: number;
-  joursPanier?: number;
-  nbJoursAbsenceInjustifiee?: number;
-  nbJoursReposMedical?: number;
-  nbJoursPermissionNonPayee?: number;
-  nbJoursPermissionPayee?: number;
-  nbJoursCongeAnnuel?: number;
   jours?: { date: string; heures?: number; codeAbsence?: CodeAbsencePointage }[];
 }
 

@@ -1,6 +1,8 @@
 import { pool } from '../../config/db';
 import { ErreurApplicative } from '../../middleware/gestionErreurs';
+import { BUCKET_LOGOS, obtenirClientStorage } from '../../config/supabaseStorage';
 import {
+  CoordonneesLegalesFiliale,
   CreationDepartement,
   CreationFiliale,
   CreationFonction,
@@ -17,6 +19,13 @@ function mapFiliale(l: Record<string, unknown>): Filiale {
     nom: l.nom as string,
     ville: l.ville as string | null,
     pays: l.pays as string,
+    adresse: l.adresse as string | null,
+    rccm: l.rccm as string | null,
+    ifu: l.ifu as string | null,
+    telephone: l.telephone as string | null,
+    siteWeb: l.site_web as string | null,
+    logoUrl: l.logo_url as string | null,
+    couleurAccent: l.couleur_accent as string | null,
     actif: l.actif as boolean,
   };
 }
@@ -66,6 +75,60 @@ export async function archiverFiliale(id: string, actif: boolean): Promise<Filia
   const { rows } = await pool.query('UPDATE filiales SET actif = $2 WHERE id = $1 RETURNING *', [id, actif]);
   if (!rows[0]) throw new ErreurApplicative(404, 'Filiale introuvable');
   return mapFiliale(rows[0]);
+}
+
+// Coordonnées légales affichées en pied de bulletin (adresse, RCCM, IFU, téléphone, site web) —
+// une valeur par filiale, entités juridiques distinctes (cf. décision produit). Toujours une
+// mise à jour complète des 5 champs (formulaire dédié, pas un patch partiel).
+export async function modifierCoordonneesFiliale(id: string, donnees: CoordonneesLegalesFiliale): Promise<Filiale> {
+  const { rows } = await pool.query(
+    `UPDATE filiales SET adresse = $2, rccm = $3, ifu = $4, telephone = $5, site_web = $6, couleur_accent = $7
+     WHERE id = $1 RETURNING *`,
+    [
+      id,
+      donnees.adresse ?? null,
+      donnees.rccm ?? null,
+      donnees.ifu ?? null,
+      donnees.telephone ?? null,
+      donnees.siteWeb ?? null,
+      donnees.couleurAccent ?? null,
+    ]
+  );
+  if (!rows[0]) throw new ErreurApplicative(404, 'Filiale introuvable');
+  return mapFiliale(rows[0]);
+}
+
+// Un seul logo par filiale — un nouvel upload écrase l'ancien (upsert) plutôt que d'accumuler
+// des fichiers orphelins dans le bucket. Bucket privé : le logo est récupéré côté serveur au
+// moment de générer le PDF, jamais exposé via une URL publique.
+export async function enregistrerLogoFiliale(
+  id: string,
+  fichier: { buffer: Buffer; mimetype: string }
+): Promise<Filiale> {
+  const client = obtenirClientStorage();
+  const chemin = `${id}.png`;
+
+  const { error } = await client.storage
+    .from(BUCKET_LOGOS)
+    .upload(chemin, fichier.buffer, { contentType: fichier.mimetype, upsert: true });
+
+  if (error) {
+    throw new ErreurApplicative(500, `Échec de l'upload du logo : ${error.message}`);
+  }
+
+  const { rows } = await pool.query('UPDATE filiales SET logo_url = $2 WHERE id = $1 RETURNING *', [id, chemin]);
+  if (!rows[0]) throw new ErreurApplicative(404, 'Filiale introuvable');
+  return mapFiliale(rows[0]);
+}
+
+// Utilisé par la génération du bulletin PDF (paie.pdf.ts) pour incorporer le logo dans l'en-tête —
+// null si aucun logo n'a été déposé pour cette filiale (fallback texte, cf. décision produit).
+export async function obtenirLogoFiliale(logoUrl: string | null): Promise<Buffer | null> {
+  if (!logoUrl) return null;
+  const client = obtenirClientStorage();
+  const { data, error } = await client.storage.from(BUCKET_LOGOS).download(logoUrl);
+  if (error || !data) return null;
+  return Buffer.from(await data.arrayBuffer());
 }
 
 export async function creerFiliale(donnees: CreationFiliale): Promise<Filiale> {

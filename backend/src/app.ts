@@ -10,7 +10,7 @@ import { routesConges } from './modules/conges/conges.routes';
 import { routesAbsences } from './modules/absences/absences.routes';
 import { routesMissions } from './modules/missions/missions.routes';
 import { routesPointage } from './modules/pointage/pointage.routes';
-import { routesPaie } from './modules/paie/paie.routes';
+import { routesPaie } from './modules/paie/paie';
 import { routesElementsVariables } from './modules/elementsVariables/elementsVariables.routes';
 import { routesCyclesPaie } from './modules/cyclesPaie/cyclesPaie.routes';
 import { routesCategoriesProfessionnelles } from './modules/categoriesProfessionnelles/categoriesProfessionnelles.routes';
@@ -20,6 +20,7 @@ import { routesAudit } from './modules/audit/audit.routes';
 import { routesUtilisateurs } from './modules/utilisateurs/utilisateurs.routes';
 import { routesParametresPaie } from './modules/parametresPaie/parametresPaie.routes';
 import { routesJoursFeries } from './modules/joursFeries/joursFeries.routes';
+import { routesAttestations } from './modules/attestations/attestations.routes';
 
 export const app = express();
 
@@ -47,5 +48,6 @@ app.use('/api/audit', routesAudit);
 app.use('/api/utilisateurs', routesUtilisateurs);
 app.use('/api/parametres-paie', routesParametresPaie);
 app.use('/api/jours-feries', routesJoursFeries);
+app.use('/api/attestations', routesAttestations);
 
 app.use(gestionnaireErreurs);

@@ -1,6 +1,7 @@
 import PDFDocument from 'pdfkit';
 import { pool } from '../../config/db';
 import { ErreurApplicative } from '../../middleware/gestionErreurs';
+import { calculerPointageDepuisJours } from './pointage.calcul';
 import { CodeAbsencePointage } from './pointage.types';
 
 interface JourBrut {
@@ -18,18 +19,10 @@ interface DonneesFiche {
   chantierNom: string;
   statutEmploye: string;
   dateDebutContrat: string | null;
-  periodeDebut: Date;
-  periodeFin: Date;
-  heuresHs15: number;
-  heuresHs35: number;
-  heuresHs60: number;
-  joursPanier: number;
-  nbJoursAbsenceInjustifiee: number;
-  nbJoursReposMedical: number;
-  nbJoursPermissionNonPayee: number;
-  nbJoursPermissionPayee: number;
-  nbJoursCongeAnnuel: number;
+  periodeDebut: string;
+  periodeFin: string;
   jours: JourBrut[];
+  joursFeries: Set<string>;
 }
 
 const CODE_ABREGE: Record<CodeAbsencePointage, string> = {
@@ -67,6 +60,13 @@ async function chargerDonneesFiche(id: string): Promise<DonneesFiche> {
     [id]
   );
 
+  const { rows: feriesRows } = await pool.query(
+    `SELECT jf.date FROM jours_feries jf
+     JOIN chantiers c ON c.id = $1
+     WHERE (jf.filiale_id IS NULL OR jf.filiale_id = c.filiale_id) AND jf.date BETWEEN $2 AND $3`,
+    [l.chantier_id, l.periode_debut, l.periode_fin]
+  );
+
   return {
     matricule: l.matricule,
     nom: l.nom,
@@ -78,20 +78,12 @@ async function chargerDonneesFiche(id: string): Promise<DonneesFiche> {
     dateDebutContrat: l.date_debut_contrat,
     periodeDebut: l.periode_debut,
     periodeFin: l.periode_fin,
-    heuresHs15: Number(l.heures_hs_15),
-    heuresHs35: Number(l.heures_hs_35),
-    heuresHs60: Number(l.heures_hs_60),
-    joursPanier: Number(l.jours_panier),
-    nbJoursAbsenceInjustifiee: Number(l.nb_jours_absence_injustifiee),
-    nbJoursReposMedical: Number(l.nb_jours_repos_medical),
-    nbJoursPermissionNonPayee: Number(l.nb_jours_permission_non_payee),
-    nbJoursPermissionPayee: Number(l.nb_jours_permission_payee),
-    nbJoursCongeAnnuel: Number(l.nb_jours_conge_annuel),
     jours: joursRows.map((j) => ({
       date: new Date(j.date as string),
       heures: j.heures !== null ? Number(j.heures) : null,
       codeAbsence: j.code_absence as CodeAbsencePointage | null,
     })),
+    joursFeries: new Set(feriesRows.map((r) => r.date as string)),
   };
 }
 
@@ -100,14 +92,18 @@ function formaterDateFr(d: Date | string): string {
 }
 
 // Reconstruit les semaines calendaires (lundi→dimanche) couvrant [debut, fin], même si ces
-// bornes ne tombent pas sur un lundi/dimanche — cellules hors-période laissées vides.
-function construireSemaines(debut: Date, fin: Date): Date[][] {
+// bornes ne tombent pas sur un lundi/dimanche — cellules hors-période laissées vides. `debut`/`fin`
+// sont des chaînes 'AAAA-MM-JJ' (colonnes DATE renvoyées en texte brut, cf. config/db.ts) — Date
+// les parse correctement en argument de constructeur, mais ne jamais les comparer à un Date avec
+// >=/<= ensuite (toujours false : Date coercée en nombre, chaîne non numérique).
+function construireSemaines(debut: string, fin: string): Date[][] {
   const semaines: Date[][] = [];
   const curseur = new Date(debut);
+  const bornefin = new Date(fin);
   const jourSemaine = (curseur.getDay() + 6) % 7; // 0 = lundi
   curseur.setDate(curseur.getDate() - jourSemaine);
 
-  while (curseur <= fin) {
+  while (curseur <= bornefin) {
     const semaine: Date[] = [];
     for (let i = 0; i < 7; i++) {
       semaine.push(new Date(curseur));
@@ -182,57 +178,72 @@ export async function genererFichePointagePdf(id: string): Promise<Buffer> {
 
   const hauteurLigne = 24;
   let totalHresGeneral = 0;
+  const joursCalcul = d.jours.map((j) => ({
+    date: j.date.toISOString().slice(0, 10),
+    heures: j.heures,
+    codeAbsence: j.codeAbsence,
+  }));
 
   for (const semaine of semaines) {
     doc.rect(xGauche, y, largeurTotale, hauteurLigne).strokeColor('#999').stroke();
     let totalSemaine = 0;
+    const joursSemaine: typeof joursCalcul = [];
 
     semaine.forEach((jourDate, i) => {
-      const dansPeriode = jourDate >= d.periodeDebut && jourDate <= d.periodeFin;
+      const cle = jourDate.toISOString().slice(0, 10);
+      const dansPeriode = cle >= d.periodeDebut && cle <= d.periodeFin;
       const x = xGauche + i * largeurJour;
       doc.moveTo(x, y).lineTo(x, y + hauteurLigne).strokeColor('#ccc').stroke();
 
       if (!dansPeriode) return;
-
-      const cle = jourDate.toISOString().slice(0, 10);
       const entree = joursParDate.get(cle);
       doc.font('Helvetica').fontSize(6.5).fillColor('#888').text(String(jourDate.getDate()), x + 2, y + 2);
 
       if (entree?.heures !== null && entree?.heures !== undefined) {
         doc.font('Helvetica').fontSize(9).fillColor('#000').text(String(entree.heures), x, y + 10, { width: largeurJour, align: 'center' });
         totalSemaine += entree.heures;
+        joursSemaine.push({ date: cle, heures: entree.heures, codeAbsence: null });
       } else if (entree?.codeAbsence) {
         doc.font('Helvetica-Bold').fontSize(8).fillColor('#a33').text(CODE_ABREGE[entree.codeAbsence], x, y + 10, { width: largeurJour, align: 'center' });
+        joursSemaine.push({ date: cle, heures: null, codeAbsence: entree.codeAbsence });
       }
     });
 
+    const totauxSemaine = calculerPointageDepuisJours(joursSemaine, d.joursFeries);
     doc.fillColor('#000').font('Helvetica-Bold').fontSize(9);
     doc.text(String(totalSemaine || ''), colTotHres, y + 8, { width: largeurTotHres, align: 'center' });
+    doc.text(String(totauxSemaine.heuresNormales || ''), colHresNor, y + 8, { width: largeurAutre, align: 'center' });
+    doc.text(String(totauxSemaine.heuresHs15 || ''), colHs15, y + 8, { width: largeurAutre, align: 'center' });
+    doc.text(String(totauxSemaine.heuresHs35 || ''), colHs35, y + 8, { width: largeurAutre, align: 'center' });
+    doc.text(String(totauxSemaine.heuresHs60 || ''), colHs60, y + 8, { width: largeurAutre, align: 'center' });
+    doc.text(String(totauxSemaine.joursPanier || ''), colPanier, y + 8, { width: largeurAutre, align: 'center' });
     totalHresGeneral += totalSemaine;
     y += hauteurLigne;
   }
 
-  // hres nor./15/35/60/panier saisis en totaux mensuels (pas de règle de répartition
-  // hebdomadaire confirmée) — affichés uniquement sur la ligne de total ci-dessous.
+  const totalMensuel = calculerPointageDepuisJours(joursCalcul, d.joursFeries);
+
+  // hres nor./15/35/60/panier recalculés depuis le détail journalier (règle HN=MIN(40)/semaine,
+  // H15%=40e→48e heure, H35%=au-delà, H60%=dimanche/férié, panier=jour pointé à ≥10h).
   doc.moveTo(xGauche, y).lineTo(xGauche + largeurTotale, y).strokeColor('#000').stroke();
   y += 4;
   doc.font('Helvetica-Bold').fontSize(9);
   doc.text('TOTAL', xGauche, y + 4, { width: 7 * largeurJour, align: 'right' });
   doc.text(String(totalHresGeneral), colTotHres, y + 4, { width: largeurTotHres, align: 'center' });
-  doc.text(String(Math.min(totalHresGeneral, 160)), colHresNor, y + 4, { width: largeurAutre, align: 'center' });
-  doc.text(String(d.heuresHs15), colHs15, y + 4, { width: largeurAutre, align: 'center' });
-  doc.text(String(d.heuresHs35), colHs35, y + 4, { width: largeurAutre, align: 'center' });
-  doc.text(String(d.heuresHs60), colHs60, y + 4, { width: largeurAutre, align: 'center' });
-  doc.text(String(d.joursPanier), colPanier, y + 4, { width: largeurAutre, align: 'center' });
+  doc.text(String(totalMensuel.heuresNormales), colHresNor, y + 4, { width: largeurAutre, align: 'center' });
+  doc.text(String(totalMensuel.heuresHs15), colHs15, y + 4, { width: largeurAutre, align: 'center' });
+  doc.text(String(totalMensuel.heuresHs35), colHs35, y + 4, { width: largeurAutre, align: 'center' });
+  doc.text(String(totalMensuel.heuresHs60), colHs60, y + 4, { width: largeurAutre, align: 'center' });
+  doc.text(String(totalMensuel.joursPanier), colPanier, y + 4, { width: largeurAutre, align: 'center' });
   y += 25;
 
   doc.font('Helvetica').fontSize(9);
   const recap: [string, number][] = [
-    ['Absence injustifiée', d.nbJoursAbsenceInjustifiee],
-    ['Repos Médical', d.nbJoursReposMedical],
-    ['Permission non payée', d.nbJoursPermissionNonPayee],
-    ['Permission payée', d.nbJoursPermissionPayee],
-    ['Congé Annuel', d.nbJoursCongeAnnuel],
+    ['Absence injustifiée', totalMensuel.nbJoursAbsenceInjustifiee],
+    ['Repos Médical', totalMensuel.nbJoursReposMedical],
+    ['Permission non payée', totalMensuel.nbJoursPermissionNonPayee],
+    ['Permission payée', totalMensuel.nbJoursPermissionPayee],
+    ['Congé Annuel', totalMensuel.nbJoursCongeAnnuel],
   ];
   for (const [libelle, valeur] of recap) {
     doc.text(`${libelle} : ${valeur} jour(s)`, xGauche + 200, y, { width: 250 });

@@ -3,6 +3,13 @@ export interface Filiale {
   nom: string;
   ville: string | null;
   pays: string;
+  adresse: string | null;
+  rccm: string | null;
+  ifu: string | null;
+  telephone: string | null;
+  siteWeb: string | null;
+  logoUrl: string | null;
+  couleurAccent: string | null;
   actif: boolean;
 }
 

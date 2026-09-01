@@ -18,7 +18,7 @@ const schemaCycle = z.object({
 });
 
 // Un rh_filiale ne peut agir que sur les filiales de son périmètre — même vérification que
-// calculerMasse dans paie.controller.ts.
+// calculerMasse dans paie.ts.
 function verifierPerimetreFiliale(req: Request, filialeId: string): void {
   const filiales = filialesAutoriseesPour(req.utilisateur!);
   if (filiales !== null && !filiales.includes(filialeId)) {

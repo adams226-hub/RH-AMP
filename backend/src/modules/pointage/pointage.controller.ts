@@ -35,28 +35,14 @@ const schemaJour = z.object({
     .optional(),
 });
 
-// Plafonds pour éviter une saisie aberrante (ex. faute de frappe : 3000 au lieu de 3) de crasher
-// en 500 sur une contrainte NUMERIC — jours_panier/nb_jours_* sont NUMERIC(5,2) en base (max
-// théorique 999.99), mais un mois n'a jamais plus de 31 jours ; heures_hs_15/35/60 sont
-// NUMERIC(6,2), plafonnées ici à 31 jours × 24h en borne large mais sensée.
-const MAX_JOURS_MOIS = 31;
-const MAX_HEURES_MOIS = 31 * 24;
-
 const schemaSaisie = z
   .object({
     employeId: z.string().uuid(),
     chantierId: z.string().uuid(),
     periodeDebut: z.string(),
     periodeFin: z.string(),
-    heuresHs15: z.number().min(0).max(MAX_HEURES_MOIS).optional(),
-    heuresHs35: z.number().min(0).max(MAX_HEURES_MOIS).optional(),
-    heuresHs60: z.number().min(0).max(MAX_HEURES_MOIS).optional(),
-    joursPanier: z.number().min(0).max(MAX_JOURS_MOIS).optional(),
-    nbJoursAbsenceInjustifiee: z.number().min(0).max(MAX_JOURS_MOIS).optional(),
-    nbJoursReposMedical: z.number().min(0).max(MAX_JOURS_MOIS).optional(),
-    nbJoursPermissionNonPayee: z.number().min(0).max(MAX_JOURS_MOIS).optional(),
-    nbJoursPermissionPayee: z.number().min(0).max(MAX_JOURS_MOIS).optional(),
-    nbJoursCongeAnnuel: z.number().min(0).max(MAX_JOURS_MOIS).optional(),
+    // Heures sup 15/35/60%, jours panier et compteurs d'absence ne se saisissent plus ici — ils
+    // sont recalculés automatiquement depuis `jours` (cf. pointage.calcul.ts).
     jours: z.array(schemaJour).optional(),
   })
   // Même règle que la contrainte CHECK (periode_fin >= periode_debut) de pointages_mensuels —

@@ -1,17 +1,159 @@
+import { Request, Response, Router } from 'express';
+import { z } from 'zod';
+import { asyncHandler } from '../../utils/asyncHandler';
+import { authentification } from '../../middleware/authentification';
+import { autoriserRoles, filialesAutoriseesPour } from '../../middleware/autorisation';
 import { pool } from '../../config/db';
 import { ErreurApplicative } from '../../middleware/gestionErreurs';
 import { verifierCycleOuvertPourEmploye, verifierCycleOuvertPourFiliale } from '../cyclesPaie/verrouCycle';
-import { calculerBrutDepuisNet, calculerBulletinPaie, Categorie } from './calculerBulletinPaie';
-import {
-  BulletinPaie,
-  ElementsCalculBulletin,
-  ResultatCalculMasse,
-  ResultatSimulationNetVersBrut,
-  SimulationNetVersBrut,
-  StatutBulletin,
-} from './paie.types';
+import { calculerBrutDepuisNet, calculerBulletinPaie, Categorie, LigneHeureSupplementaire } from './calculerBulletinPaie';
+import { genererBulletinPdf } from './paie.pdf';
+
+// ============================================================================
+// Types
+// ============================================================================
+
+export type StatutBulletin = 'brouillon' | 'calcule' | 'valide' | 'valide_drh' | 'cloture';
+
+export interface BulletinPaie {
+  id: string;
+  employeId: string;
+  periode: string;
+
+  joursPrisEnCompte: number;
+  personnesACharge: number;
+  // Snapshot de fonctions.intitule au moment du calcul (cf. bulletins_paie.fonction_intitule) —
+  // un renommage/archivage ultérieur de la fonction ne change jamais un bulletin déjà généré.
+  fonctionIntitule: string | null;
+
+  salaireBase: number;
+  sursalaire: number;
+  indemniteLogement: number;
+  indemniteTransport: number;
+  indemniteFonction: number;
+  indemniteSujetion: number;
+  indemniteAstreinte: number;
+  ancienneteAnnees: number;
+  primeAnciennete: number;
+  heuresSupplementaires: number;
+  hs15: number;
+  hs35: number;
+  hs50: number;
+  hs60: number;
+  hs120: number;
+  primePanier: number;
+  primeSalissure: number;
+  primeLait: number;
+  autresIndemnites: number;
+  avanceAcompte: number;
+  reliquat: number;
+  reversementTropPercu: number;
+
+  brut: number;
+  exonerationsIndemnites: number;
+  abattementForfaitaire: number;
+  salaireNetImposable: number;
+  baseImposable: number;
+  iuts: number;
+  cnssSalariale: number;
+  salaireNet: number;
+  fsp: number;
+  autresRetenues: number;
+  netAPayer: number;
+  coutEmployeur: number;
+
+  statut: StatutBulletin;
+  pdfUrl: string | null;
+}
+
+export interface ElementsCalculBulletin {
+  employeId: string;
+  periode: string;
+}
+
+export interface EchecCalculMasse {
+  employeId: string;
+  nom: string;
+  prenoms: string;
+  motif: string;
+}
+
+export interface ResultatCalculMasse {
+  periode: string;
+  bulletinsCalcules: BulletinPaie[];
+  echecs: EchecCalculMasse[];
+}
+
+// Simulateur Net → Brut (ADDENDUM_CALCUL_INVERSE_PAIE_AMP.md) — ne touche jamais la base ;
+// mêmes champs qu'un bulletin pour l'affichage, sans id/employeId/periode/statut.
+export interface DetailBulletinSimule {
+  joursPrisEnCompte: number;
+  personnesACharge: number;
+  salaireBase: number;
+  sursalaire: number;
+  indemniteLogement: number;
+  indemniteTransport: number;
+  indemniteFonction: number;
+  indemniteSujetion: number;
+  indemniteAstreinte: number;
+  ancienneteAnnees: number;
+  primeAnciennete: number;
+  heuresSupplementaires: number;
+  primePanier: number;
+  autresIndemnites: number;
+  reliquat: number;
+  reversementTropPercu: number;
+  retenuesAvancesDuMois: number;
+  brut: number;
+  exonerationsIndemnites: number;
+  abattementForfaitaire: number;
+  salaireNetImposable: number;
+  baseImposable: number;
+  iuts: number;
+  cnssSalariale: number;
+  salaireNet: number;
+  fsp: number;
+  netAPayer: number;
+}
+
+export interface SimulationNetVersBrut {
+  netCible: number;
+  categorie: 'CADRE' | 'NON_CADRE';
+  personnesACharge?: number;
+  ancienneteAnnees?: number;
+  salaireDeBase?: number;
+  sursalaire?: number;
+  indemniteLogement?: number;
+  indemniteTransport?: number;
+  indemniteSujetion?: number;
+  indemniteAstreinte?: number;
+  indemniteFonction?: number;
+  panier?: number;
+  autresIndemnites?: number;
+  retenuesAvancesDuMois?: number;
+  reliquat?: number;
+  reversementTropPercu?: number;
+  joursPrisEnCompte?: number;
+  champVariable?: 'salaireDeBase' | 'sursalaire';
+}
+
+export interface ResultatSimulationNetVersBrut {
+  champVariable: 'salaireDeBase' | 'sursalaire';
+  valeurTrouvee: number;
+  convergence: boolean;
+  ecartFinal: number;
+  bulletin: DetailBulletinSimule;
+}
+
+// ============================================================================
+// Service
+// ============================================================================
 
 const PLAFOND_CNSS = 800_000;
+
+function montantParTaux(lignes: LigneHeureSupplementaire[], majorationPourcent: number): number {
+  return lignes.find((l) => l.majorationPourcent === majorationPourcent)?.montant ?? 0;
+}
 
 export async function obtenirParametre(cle: string): Promise<number> {
   const { rows } = await pool.query(
@@ -121,7 +263,14 @@ function mapBulletin(l: Record<string, unknown>): BulletinPaie {
     ancienneteAnnees: Number(l.anciennete_annees),
     primeAnciennete: Number(l.prime_anciennete),
     heuresSupplementaires: Number(l.heures_supplementaires),
+    hs15: Number(l.hs_15),
+    hs35: Number(l.hs_35),
+    hs50: Number(l.hs_50),
+    hs60: Number(l.hs_60),
+    hs120: Number(l.hs_120),
     primePanier: Number(l.prime_panier),
+    primeSalissure: Number(l.prime_salissure),
+    primeLait: Number(l.prime_lait),
     autresIndemnites: Number(l.autres_indemnites),
     avanceAcompte: Number(l.avance_acompte),
     reliquat: Number(l.reliquat),
@@ -143,8 +292,28 @@ function mapBulletin(l: Record<string, unknown>): BulletinPaie {
   };
 }
 
+// Bloque le calcul de paie d'un employé rattaché à un chantier (profil nécessitant un pointage)
+// tant que sa fiche Pointage du mois n'est pas au statut 'valide' — SPEC_MODULE_POINTAGE_AMP.md
+// §7, blocage explicite (message porté par l'erreur) plutôt qu'exclusion silencieuse. Le
+// personnel sans chantier (bureau/cadres siège) n'est pas concerné : sa paie continue de venir
+// uniquement d'Éléments du mois, comme avant.
+async function verifierPointageValidePourEmploye(employeId: string, periode: string): Promise<void> {
+  const { rows: employeRows } = await pool.query('SELECT chantier_id FROM employes WHERE id = $1', [employeId]);
+  const chantierId = employeRows[0]?.chantier_id as string | null | undefined;
+  if (!chantierId) return;
+
+  const { rows: ficheRows } = await pool.query(
+    `SELECT statut FROM pointages_mensuels WHERE employe_id = $1 AND mois_paie = date_trunc('month', $2::date)`,
+    [employeId, periode]
+  );
+  if (ficheRows[0]?.statut !== 'valide') {
+    throw new ErreurApplicative(409, 'Pointage non validé — paie bloquée');
+  }
+}
+
 export async function calculerEtEnregistrerBulletin(elements: ElementsCalculBulletin): Promise<BulletinPaie> {
   await verifierCycleOuvertPourEmploye(elements.employeId, elements.periode);
+  await verifierPointageValidePourEmploye(elements.employeId, elements.periode);
 
   const contrat = await obtenirContratActif(elements.employeId);
   const employe = await obtenirEmployePourPaie(elements.employeId);
@@ -163,7 +332,8 @@ export async function calculerEtEnregistrerBulletin(elements: ElementsCalculBull
      WHERE employe_id = $1 AND periode = date_trunc('month', $2::date)
        AND type IN (
          'prime', 'avance', 'panier', 'reliquat', 'absence_injustifiee', 'trop_percu',
-         'heure_sup_15', 'heure_sup_35', 'heure_sup_50', 'heure_sup_60', 'heure_sup_120'
+         'heure_sup_15', 'heure_sup_35', 'heure_sup_50', 'heure_sup_60', 'heure_sup_120',
+         'prime_salissure', 'prime_lait'
        )
      GROUP BY type`,
     [elements.employeId, elements.periode]
@@ -206,6 +376,8 @@ export async function calculerEtEnregistrerBulletin(elements: ElementsCalculBull
       reversementTropPercu: montantDuType('trop_percu'),
       reliquat: montantDuType('reliquat'),
       panier: montantDuType('panier'),
+      primeSalissure: montantDuType('prime_salissure'),
+      primeLait: montantDuType('prime_lait'),
     }
   );
 
@@ -226,7 +398,8 @@ export async function calculerEtEnregistrerBulletin(elements: ElementsCalculBull
        employe_id, periode, jours_pris_en_compte, personnes_a_charge, fonction_intitule,
        salaire_base, sursalaire, indemnite_logement, indemnite_transport, indemnite_fonction,
        indemnite_sujetion, indemnite_astreinte, anciennete_annees, prime_anciennete,
-       heures_supplementaires, prime_panier, autres_indemnites, avance_acompte, reliquat,
+       heures_supplementaires, hs_15, hs_35, hs_50, hs_60, hs_120,
+       prime_panier, prime_salissure, prime_lait, autres_indemnites, avance_acompte, reliquat,
        reversement_trop_percu, brut, exonerations_indemnites, abattement_forfaitaire,
        salaire_net_imposable, base_imposable, iuts, cnss_salariale, salaire_net, fsp,
        autres_retenues, net_a_payer, cout_employeur, statut
@@ -234,10 +407,11 @@ export async function calculerEtEnregistrerBulletin(elements: ElementsCalculBull
        $1, date_trunc('month', $2::date), $3, $4, $5,
        $6, $7, $8, $9, $10,
        $11, $12, $13, $14,
-       $15, $16, $17, $18, $19,
-       $20, $21, $22, $23,
-       $24, $25, $26, $27, $28, $29,
-       0, $30, $31, 'calcule'
+       $15, $16, $17, $18, $19, $20,
+       $21, $22, $23, $24, $25, $26,
+       $27, $28, $29, $30,
+       $31, $32, $33, $34, $35, $36,
+       0, $37, $38, 'calcule'
      )
      ON CONFLICT (employe_id, periode) DO UPDATE SET
        jours_pris_en_compte = EXCLUDED.jours_pris_en_compte, personnes_a_charge = EXCLUDED.personnes_a_charge,
@@ -247,7 +421,9 @@ export async function calculerEtEnregistrerBulletin(elements: ElementsCalculBull
        indemnite_fonction = EXCLUDED.indemnite_fonction, indemnite_sujetion = EXCLUDED.indemnite_sujetion,
        indemnite_astreinte = EXCLUDED.indemnite_astreinte, anciennete_annees = EXCLUDED.anciennete_annees,
        prime_anciennete = EXCLUDED.prime_anciennete, heures_supplementaires = EXCLUDED.heures_supplementaires,
-       prime_panier = EXCLUDED.prime_panier, autres_indemnites = EXCLUDED.autres_indemnites,
+       hs_15 = EXCLUDED.hs_15, hs_35 = EXCLUDED.hs_35, hs_50 = EXCLUDED.hs_50, hs_60 = EXCLUDED.hs_60, hs_120 = EXCLUDED.hs_120,
+       prime_panier = EXCLUDED.prime_panier, prime_salissure = EXCLUDED.prime_salissure, prime_lait = EXCLUDED.prime_lait,
+       autres_indemnites = EXCLUDED.autres_indemnites,
        avance_acompte = EXCLUDED.avance_acompte, reliquat = EXCLUDED.reliquat,
        reversement_trop_percu = EXCLUDED.reversement_trop_percu,
        brut = EXCLUDED.brut, exonerations_indemnites = EXCLUDED.exonerations_indemnites,
@@ -272,7 +448,16 @@ export async function calculerEtEnregistrerBulletin(elements: ElementsCalculBull
       resultat.ancienneteAnnees,
       resultat.primeAnciennete,
       resultat.totalHeuresSupplementaires,
+      // Montant calculé (F CFA) par tranche, pas les heures saisies — resultat.heuresSupplementaires
+      // contient déjà { majorationPourcent, nombreHeures, tauxHoraire, montant } par taux.
+      montantParTaux(resultat.heuresSupplementaires, 15),
+      montantParTaux(resultat.heuresSupplementaires, 35),
+      montantParTaux(resultat.heuresSupplementaires, 50),
+      montantParTaux(resultat.heuresSupplementaires, 60),
+      montantParTaux(resultat.heuresSupplementaires, 120),
       montantDuType('panier'),
+      montantDuType('prime_salissure'),
+      montantDuType('prime_lait'),
       montantDuType('prime'),
       montantDuType('avance'),
       montantDuType('reliquat'),
@@ -431,3 +616,126 @@ export async function changerStatutBulletin(id: string, statut: StatutBulletin):
 
   return mapBulletin(rows[0]);
 }
+
+// ============================================================================
+// Contrôleur
+// ============================================================================
+
+// Sursalaire/indemnités viennent du contrat actif ; primes/avances/panier/reliquat/absences
+// viennent de l'écran "Éléments du mois" (module elementsVariables) — plus aucune saisie
+// manuelle ici, le calcul individuel et le calcul de masse partagent la même source.
+const schemaCalcul = z.object({
+  employeId: z.string().uuid(),
+  periode: z.string(),
+});
+
+const schemaCalculMasse = z.object({
+  filialeId: z.string().uuid(),
+  periode: z.string(),
+});
+
+const schemaStatut = z.object({
+  statut: z.enum(['valide', 'valide_drh', 'cloture']),
+});
+
+const schemaSimulation = z.object({
+  netCible: z.number().positive(),
+  categorie: z.enum(['CADRE', 'NON_CADRE']),
+  personnesACharge: z.number().int().nonnegative().optional(),
+  ancienneteAnnees: z.number().int().nonnegative().optional(),
+  salaireDeBase: z.number().nonnegative().optional(),
+  sursalaire: z.number().nonnegative().optional(),
+  indemniteLogement: z.number().nonnegative().optional(),
+  indemniteTransport: z.number().nonnegative().optional(),
+  indemniteSujetion: z.number().nonnegative().optional(),
+  indemniteAstreinte: z.number().nonnegative().optional(),
+  indemniteFonction: z.number().nonnegative().optional(),
+  panier: z.number().nonnegative().optional(),
+  autresIndemnites: z.number().nonnegative().optional(),
+  retenuesAvancesDuMois: z.number().nonnegative().optional(),
+  reliquat: z.number().nonnegative().optional(),
+  reversementTropPercu: z.number().nonnegative().optional(),
+  joursPrisEnCompte: z.number().nonnegative().optional(),
+  champVariable: z.enum(['salaireDeBase', 'sursalaire']).optional(),
+});
+
+export async function calculer(req: Request, res: Response) {
+  const donnees = schemaCalcul.parse(req.body);
+  res.status(201).json(await calculerEtEnregistrerBulletin(donnees));
+}
+
+export async function calculerMasse(req: Request, res: Response) {
+  const { filialeId, periode } = schemaCalculMasse.parse(req.body);
+  const filiales = filialesAutoriseesPour(req.utilisateur!);
+
+  if (filiales !== null && !filiales.includes(filialeId)) {
+    throw new ErreurApplicative(403, "Cette filiale n'est pas dans votre périmètre");
+  }
+
+  res.json(await calculerMasseSalariale(filialeId, periode));
+}
+
+// Vérifie que l'utilisateur peut voir les bulletins de cet employé : lui-même, ou une
+// filiale dans son périmètre. Absent avant cette révision — n'importe quel authentifié
+// pouvait lire le détail de salaire de n'importe qui en changeant employeId dans l'URL.
+async function verifierAccesEmploye(req: Request, employeId: string): Promise<void> {
+  const utilisateur = req.utilisateur!;
+  if (utilisateur.employeId === employeId) return;
+
+  const filiales = filialesAutoriseesPour(utilisateur);
+  if (filiales === null) return;
+
+  const { rows } = await pool.query('SELECT filiale_id FROM employes WHERE id = $1', [employeId]);
+  if (!rows[0] || !filiales.includes(rows[0].filiale_id)) {
+    throw new ErreurApplicative(403, 'Accès refusé à la paie de cet employé');
+  }
+}
+
+export async function lister(req: Request, res: Response) {
+  const employeId = req.query.employeId as string;
+  if (!employeId) {
+    throw new ErreurApplicative(400, 'Le paramètre employeId est requis');
+  }
+  await verifierAccesEmploye(req, employeId);
+  res.json(await listerBulletinsEmploye(employeId));
+}
+
+export async function simuler(req: Request, res: Response) {
+  const donnees = schemaSimulation.parse(req.body);
+  res.json(await simulerNetVersBrut(donnees));
+}
+
+export async function changerStatut(req: Request, res: Response) {
+  const { statut } = schemaStatut.parse(req.body);
+  res.json(await changerStatutBulletin(req.params.id, statut));
+}
+
+export async function fiche(req: Request, res: Response) {
+  const { rows } = await pool.query('SELECT employe_id FROM bulletins_paie WHERE id = $1', [req.params.id]);
+  if (!rows[0]) {
+    throw new ErreurApplicative(404, 'Bulletin introuvable');
+  }
+  await verifierAccesEmploye(req, rows[0].employe_id);
+
+  const pdf = await genererBulletinPdf(req.params.id);
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="bulletin-${req.params.id}.pdf"`);
+  res.send(pdf);
+}
+
+// ============================================================================
+// Routes
+// ============================================================================
+
+export const routesPaie = Router();
+
+routesPaie.use(authentification);
+
+const gestionnairesPaie = autoriserRoles('super_admin', 'drh_holding', 'rh_filiale');
+
+routesPaie.get('/bulletins', asyncHandler(lister));
+routesPaie.get('/bulletins/:id/fiche', asyncHandler(fiche));
+routesPaie.post('/bulletins/calculer', gestionnairesPaie, asyncHandler(calculer));
+routesPaie.post('/bulletins/calculer-masse', gestionnairesPaie, asyncHandler(calculerMasse));
+routesPaie.post('/simuler-net-vers-brut', gestionnairesPaie, asyncHandler(simuler));
+routesPaie.post('/bulletins/:id/statut', autoriserRoles('super_admin', 'drh_holding'), asyncHandler(changerStatut));

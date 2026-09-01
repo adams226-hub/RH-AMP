@@ -4,6 +4,7 @@ import { CodeRole, useAuth } from '../context/AuthContext';
 import {
   IconeAbsences,
   IconeArchivage,
+  IconeAttestations,
   IconeAudit,
   IconeConges,
   IconeMissions,
@@ -62,6 +63,12 @@ const LIENS: LienNav[] = [
     libelle: 'Archivage',
     icone: IconeArchivage,
     roles: ['super_admin', 'drh_holding', 'rh_filiale', 'employe'],
+  },
+  {
+    vers: '/attestations',
+    libelle: 'Attestations',
+    icone: IconeAttestations,
+    roles: ['super_admin', 'drh_holding', 'rh_filiale'],
   },
   {
     vers: '/tableaux-de-bord',
