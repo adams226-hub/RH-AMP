@@ -155,7 +155,12 @@ function formaterPeriode(d: Date): string {
 
 function formaterMontant(valeur: number): string {
   if (!valeur) return '-';
-  return Math.round(valeur).toLocaleString('fr-FR').replace(/ /g, ' ');
+  // toLocaleString('fr-FR') sépare les milliers par une espace fine insécable (U+202F) ou une
+  // espace insécable (U+00A0) selon l'environnement — absentes de la police PDF (Helvetica/
+  // WinAnsi), elles s'affichaient comme un caractère invalide (barre oblique). Remplacées ici par
+  // une espace normale (U+0020), qui existe dans toutes les polices — regex par code point pour
+  // ne pas dépendre du rendu visuel de caractères invisibles dans le fichier source.
+  return Math.round(valeur).toLocaleString('fr-FR').replace(/[  ]/g, ' ');
 }
 
 interface LigneTableau {
@@ -243,7 +248,7 @@ export async function genererBulletinPdf(id: string): Promise<Buffer> {
   const largeurAvoirs = 90;
 
   doc.rect(xGauche, y, largeurTotale, 18).fillColor('#e2e2e2').fill();
-  doc.fillColor('#000').font('Helvetica-Bold').fontSize(8.5);
+  doc.fillColor('#000').font('Helvetica-Bold').fontSize(9);
   doc.text('LIBELLÉ', colLibelle + 4, y + 5);
   doc.text('BASE', colBase, y + 5, { width: largeurBase, align: 'right' });
   doc.text('TAUX', colTaux, y + 5, { width: largeurTaux, align: 'right' });
@@ -304,7 +309,7 @@ export async function genererBulletinPdf(id: string): Promise<Buffer> {
       y += 6;
       continue;
     }
-    doc.font(ligne.gras ? 'Helvetica-Bold' : ligne.indent ? 'Helvetica-Oblique' : 'Helvetica').fontSize(8.5);
+    doc.font(ligne.gras ? 'Helvetica-Bold' : ligne.indent ? 'Helvetica-Oblique' : 'Helvetica').fontSize(9);
     doc.fillColor('#000').text(ligne.libelle, colLibelle + (ligne.indent ? 12 : 4), y, { width: largeurLibelle - (ligne.indent ? 16 : 8) });
     if (ligne.base !== undefined) {
       doc.text(formaterMontant(ligne.base), colBase, y, { width: largeurBase, align: 'right' });
@@ -318,7 +323,7 @@ export async function genererBulletinPdf(id: string): Promise<Buffer> {
     if (ligne.avoir !== undefined) {
       doc.text(formaterMontant(ligne.avoir), colAvoirs, y, { width: largeurAvoirs - 4, align: 'right' });
     }
-    y += 13;
+    y += 15;
   }
 
   const totalRetenues = d.cnssSalariale + d.iuts + d.fsp + d.reversementTropPercu + d.avanceAcompte + d.autresRetenues;

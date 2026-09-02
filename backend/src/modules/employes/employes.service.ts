@@ -27,6 +27,7 @@ function mapLigne(ligne: Record<string, unknown>): Employe {
     dateEmbauche: ligne.date_embauche as string,
     statut: ligne.statut as Employe['statut'],
     categorieProfessionnelle: ligne.categorie_professionnelle as Employe['categorieProfessionnelle'],
+    soumisPointage: ligne.soumis_pointage as boolean,
   };
 }
 
@@ -90,9 +91,10 @@ export async function creerEmploye(donnees: CreationEmploye): Promise<Employe> {
     `INSERT INTO employes (
        matricule, nom, prenoms, date_naissance, sexe, nationalite, telephone, num_cnib, num_cnss,
        rib, banque, mode_paiement, personnes_a_charge,
-       filiale_id, departement_id, service_id, fonction_id, chantier_id, date_embauche, categorie_professionnelle
+       filiale_id, departement_id, service_id, fonction_id, chantier_id, date_embauche, categorie_professionnelle,
+       soumis_pointage
      )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
      RETURNING *`,
     [
       donnees.matricule,
@@ -115,6 +117,7 @@ export async function creerEmploye(donnees: CreationEmploye): Promise<Employe> {
       donnees.chantierId ?? null,
       donnees.dateEmbauche,
       donnees.categorieProfessionnelle ?? null,
+      donnees.soumisPointage ?? false,
     ]
   );
 
@@ -128,6 +131,21 @@ export async function affecterChantierEmploye(id: string, chantierId: string | n
     id,
     chantierId,
   ]);
+
+  if (!rows[0]) {
+    throw new ErreurApplicative(404, 'Employé introuvable');
+  }
+
+  return mapLigne(rows[0]);
+}
+
+// Décision RH indépendante du chantier/contrat — cf. commentaire soumis_pointage sur la table
+// employes (schema.sql) et paie.ts qui lit ce champ pour décider du blocage de paie.
+export async function definirSoumisPointage(id: string, soumisPointage: boolean): Promise<Employe> {
+  const { rows } = await pool.query(
+    'UPDATE employes SET soumis_pointage = $2, updated_at = now() WHERE id = $1 RETURNING *',
+    [id, soumisPointage]
+  );
 
   if (!rows[0]) {
     throw new ErreurApplicative(404, 'Employé introuvable');

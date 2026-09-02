@@ -1,5 +1,6 @@
 import cors from 'cors';
 import express from 'express';
+import { env } from './config/env';
 import { gestionnaireErreurs } from './middleware/gestionErreurs';
 import { journalAudit } from './middleware/journalAudit';
 import { routesAuth } from './modules/auth/auth.routes';
@@ -26,6 +27,13 @@ export const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+// Simulation de réseau lent (dev uniquement) — cf. LATENCE_SIMULEE_MS dans config/env.ts.
+if (env.LATENCE_SIMULEE_MS > 0) {
+  console.log(`Latence simulée activée : +${env.LATENCE_SIMULEE_MS}ms sur chaque requête API`);
+  app.use((_req, _res, next) => setTimeout(next, env.LATENCE_SIMULEE_MS));
+}
+
 app.use(journalAudit);
 
 app.get('/sante', (_req, res) => res.json({ statut: 'ok' }));

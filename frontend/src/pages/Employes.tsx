@@ -41,6 +41,7 @@ const ETAT_INITIAL = {
   chantierId: '',
   dateEmbauche: '',
   categorieProfessionnelle: '',
+  soumisPointage: false,
 };
 
 const LIBELLES_STATUT: Record<StatutEmploye, string> = {
@@ -62,6 +63,7 @@ export function Employes() {
   const [filialesVisibles, setFilialesVisibles] = useState<Filiale[]>([]);
   const [chantiers, setChantiers] = useState<Chantier[]>([]);
   const [chantierEnCours, setChantierEnCours] = useState(false);
+  const [pointageEnCours, setPointageEnCours] = useState(false);
   const [categories, setCategories] = useState<CategorieProfessionnelle[]>([]);
   const [erreur, setErreur] = useState<string | null>(null);
   const [chargement, setChargement] = useState(true);
@@ -124,6 +126,20 @@ export function Employes() {
       setErreur(e instanceof ErreurApi ? e.message : "Erreur lors de l'affectation du chantier");
     } finally {
       setChantierEnCours(false);
+    }
+  }
+
+  async function definirSoumisPointageEmployeSelectionne(soumisPointage: boolean) {
+    if (!jeton || !employeSelectionne) return;
+    setPointageEnCours(true);
+    try {
+      const employe = await api.changerSoumisPointageEmploye(jeton, employeSelectionne.id, soumisPointage);
+      setEmployeSelectionne(employe);
+      rafraichir();
+    } catch (e) {
+      setErreur(e instanceof ErreurApi ? e.message : "Erreur lors de la mise à jour du pointage");
+    } finally {
+      setPointageEnCours(false);
     }
   }
 
@@ -407,6 +423,21 @@ export function Employes() {
                 Utilisé sur le Journal de Paie ; écrasé automatiquement si un pointage validé existe pour le mois.
               </p>
             </div>
+            <div className="flex items-center gap-2 pt-5">
+              <input
+                type="checkbox"
+                id="soumisPointage"
+                checked={champs.soumisPointage}
+                onChange={(e) => majChamp('soumisPointage', e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-primary-700 focus:ring-primary-100"
+              />
+              <label htmlFor="soumisPointage" className="text-sm text-slate-700">
+                Soumis au pointage
+                <span className="block text-xs font-normal text-slate-400">
+                  La paie sera bloquée tant que sa fiche de pointage du mois n'est pas validée.
+                </span>
+              </label>
+            </div>
           </div>
           <button
             disabled={envoiEnCours}
@@ -556,6 +587,24 @@ export function Employes() {
               </select>
             ) : (
               <dd className="mt-0.5 text-slate-800">{nomChantier(employeSelectionne.chantierId) ?? 'Non renseigné'}</dd>
+            )}
+          </div>
+
+          <div className="mt-4 border-t border-slate-100 pt-4">
+            <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">Soumis au pointage</dt>
+            {peutGerer ? (
+              <label className="mt-1.5 flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={employeSelectionne.soumisPointage}
+                  onChange={(e) => definirSoumisPointageEmployeSelectionne(e.target.checked)}
+                  disabled={pointageEnCours}
+                  className="h-4 w-4 rounded border-slate-300 text-primary-700 focus:ring-primary-100"
+                />
+                {employeSelectionne.soumisPointage ? 'Oui — paie bloquée sans pointage validé' : 'Non'}
+              </label>
+            ) : (
+              <dd className="mt-0.5 text-slate-800">{employeSelectionne.soumisPointage ? 'Oui' : 'Non'}</dd>
             )}
           </div>
         </Modale>

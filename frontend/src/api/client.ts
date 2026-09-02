@@ -130,12 +130,15 @@ export const api = {
       chantierId?: string;
       dateEmbauche: string;
       categorieProfessionnelle?: string;
+      soumisPointage?: boolean;
     }
   ) => requete<Employe>('/api/employes', { method: 'POST', body: JSON.stringify(donnees) }, jeton),
   changerStatutEmploye: (jeton: string, id: string, statut: Employe['statut']) =>
     requete<Employe>(`/api/employes/${id}/statut`, { method: 'POST', body: JSON.stringify({ statut }) }, jeton),
   affecterChantierEmploye: (jeton: string, id: string, chantierId: string | null) =>
     requete<Employe>(`/api/employes/${id}/chantier`, { method: 'POST', body: JSON.stringify({ chantierId }) }, jeton),
+  changerSoumisPointageEmploye: (jeton: string, id: string, soumisPointage: boolean) =>
+    requete<Employe>(`/api/employes/${id}/pointage`, { method: 'POST', body: JSON.stringify({ soumisPointage }) }, jeton),
 
   // Postes
   listerFiliales: (jeton: string, visiblesUniquement = false) =>

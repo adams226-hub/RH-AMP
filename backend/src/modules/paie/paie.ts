@@ -292,15 +292,15 @@ function mapBulletin(l: Record<string, unknown>): BulletinPaie {
   };
 }
 
-// Bloque le calcul de paie d'un employé rattaché à un chantier (profil nécessitant un pointage)
-// tant que sa fiche Pointage du mois n'est pas au statut 'valide' — SPEC_MODULE_POINTAGE_AMP.md
-// §7, blocage explicite (message porté par l'erreur) plutôt qu'exclusion silencieuse. Le
-// personnel sans chantier (bureau/cadres siège) n'est pas concerné : sa paie continue de venir
-// uniquement d'Éléments du mois, comme avant.
+// Bloque le calcul de paie d'un employé marqué « soumis au pointage » (employes.soumis_pointage,
+// décision RH explicite par employé — cf. schema.sql) tant que sa fiche Pointage du mois n'est
+// pas au statut 'valide'. Volontairement indépendant de chantier_id (simple localisation, pas un
+// indicateur fiable) et de l'existence d'un contrat (un employé sans contrat, payé hors SIRH, peut
+// très bien être pointé quand même sans jamais passer par le calcul de bulletin). Blocage explicite
+// (message porté par l'erreur) plutôt qu'exclusion silencieuse — SPEC_MODULE_POINTAGE_AMP.md §7.
 async function verifierPointageValidePourEmploye(employeId: string, periode: string): Promise<void> {
-  const { rows: employeRows } = await pool.query('SELECT chantier_id FROM employes WHERE id = $1', [employeId]);
-  const chantierId = employeRows[0]?.chantier_id as string | null | undefined;
-  if (!chantierId) return;
+  const { rows: employeRows } = await pool.query('SELECT soumis_pointage FROM employes WHERE id = $1', [employeId]);
+  if (!employeRows[0]?.soumis_pointage) return;
 
   const { rows: ficheRows } = await pool.query(
     `SELECT statut FROM pointages_mensuels WHERE employe_id = $1 AND mois_paie = date_trunc('month', $2::date)`,

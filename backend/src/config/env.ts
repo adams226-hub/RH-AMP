@@ -11,6 +11,10 @@ const schemaEnv = z.object({
   JWT_EXPIRES_IN: z.string().default('8h'),
   SUPABASE_URL: z.string().url().optional(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
+  // Délai artificiel (ms) ajouté à chaque requête API — outil de dev pour tester les écrans de
+  // chargement dans des conditions de réseau lent. 0 = désactivé (comportement normal). Jamais
+  // utile en production, à ne pas définir dans un .env de déploiement.
+  LATENCE_SIMULEE_MS: z.coerce.number().nonnegative().default(0),
 });
 
 const resultat = schemaEnv.safeParse(process.env);

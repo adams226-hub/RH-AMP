@@ -252,6 +252,12 @@ CREATE TABLE employes (
     fonction_id     UUID REFERENCES fonctions(id) ON DELETE SET NULL,
     superieur_id    UUID REFERENCES employes(id) ON DELETE SET NULL, -- auto-référence, un seul supérieur (pas de matriciel — cf. specs Postes §6)
     chantier_id     UUID REFERENCES chantiers(id) ON DELETE SET NULL, -- lieu d'affectation par défaut (Journal de Paie)
+    -- Pilote le blocage de paie tant que le pointage du mois n'est pas validé (paie.ts). Indépendant
+    -- de chantier_id (qui n'est qu'une localisation) et de la présence d'un contrat : un employé
+    -- sans contrat, payé hors SIRH (main à main / Orange Money), peut très bien être pointé quand
+    -- même — décision RH explicite par employé, jamais déduite d'un autre champ. Défaut à false
+    -- pour ne bloquer personne tant que le RH n'a pas coché la case lui-même.
+    soumis_pointage BOOLEAN NOT NULL DEFAULT false,
 
     date_embauche   DATE NOT NULL,
     statut          statut_employe NOT NULL DEFAULT 'en_cours_creation',

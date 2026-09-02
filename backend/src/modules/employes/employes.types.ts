@@ -26,6 +26,9 @@ export interface Employe {
   dateEmbauche: string;
   statut: StatutEmploye;
   categorieProfessionnelle: string | null;
+  // Indépendant de chantierId et de l'existence d'un contrat — décision RH explicite, pilote le
+  // blocage de paie tant que le pointage du mois n'est pas validé (cf. paie.ts).
+  soumisPointage: boolean;
 }
 
 export interface CreationEmploye {
@@ -49,4 +52,5 @@ export interface CreationEmploye {
   chantierId?: string;
   dateEmbauche: string;
   categorieProfessionnelle?: string;
+  soumisPointage?: boolean;
 }

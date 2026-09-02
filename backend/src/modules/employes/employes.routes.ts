@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { authentification } from '../../middleware/authentification';
 import { autoriserRoles } from '../../middleware/autorisation';
-import { affecterChantier, changerStatut, creer, lister, obtenir } from './employes.controller';
+import { affecterChantier, changerSoumisPointage, changerStatut, creer, lister, obtenir } from './employes.controller';
 
 export const routesEmployes = Router();
 
@@ -15,3 +15,4 @@ routesEmployes.get('/:id', asyncHandler(obtenir));
 routesEmployes.post('/', gestionnairesEmployes, asyncHandler(creer));
 routesEmployes.post('/:id/statut', gestionnairesEmployes, asyncHandler(changerStatut));
 routesEmployes.post('/:id/chantier', gestionnairesEmployes, asyncHandler(affecterChantier));
+routesEmployes.post('/:id/pointage', gestionnairesEmployes, asyncHandler(changerSoumisPointage));

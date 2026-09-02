@@ -2,7 +2,14 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import { ErreurApplicative } from '../../middleware/gestionErreurs';
 import { filialesAutoriseesPour } from '../../middleware/autorisation';
-import { affecterChantierEmploye, changerStatutEmploye, creerEmploye, listerEmployes, obtenirEmploye } from './employes.service';
+import {
+  affecterChantierEmploye,
+  changerStatutEmploye,
+  creerEmploye,
+  definirSoumisPointage,
+  listerEmployes,
+  obtenirEmploye,
+} from './employes.service';
 
 const schemaStatut = z.object({
   statut: z.enum(['en_cours_creation', 'actif', 'suspendu', 'sorti']),
@@ -10,6 +17,10 @@ const schemaStatut = z.object({
 
 const schemaChantier = z.object({
   chantierId: z.string().uuid().nullable(),
+});
+
+const schemaSoumisPointage = z.object({
+  soumisPointage: z.boolean(),
 });
 
 const schemaCreationEmploye = z.object({
@@ -33,6 +44,7 @@ const schemaCreationEmploye = z.object({
   chantierId: z.string().uuid().optional(),
   dateEmbauche: z.string(),
   categorieProfessionnelle: z.string().min(1).optional(),
+  soumisPointage: z.boolean().optional(),
 });
 
 export async function lister(req: Request, res: Response) {
@@ -71,4 +83,9 @@ export async function changerStatut(req: Request, res: Response) {
 export async function affecterChantier(req: Request, res: Response) {
   const { chantierId } = schemaChantier.parse(req.body);
   res.json(await affecterChantierEmploye(req.params.id, chantierId));
+}
+
+export async function changerSoumisPointage(req: Request, res: Response) {
+  const { soumisPointage } = schemaSoumisPointage.parse(req.body);
+  res.json(await definirSoumisPointage(req.params.id, soumisPointage));
 }

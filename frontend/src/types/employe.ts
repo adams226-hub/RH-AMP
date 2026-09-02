@@ -25,4 +25,7 @@ export interface Employe {
   statut: StatutEmploye;
   // Référence categories_professionnelles.code (référentiel géré depuis Paramètres).
   categorieProfessionnelle: string | null;
+  // Décision RH indépendante du chantier/contrat — pilote le blocage de paie tant que le
+  // pointage du mois n'est pas validé.
+  soumisPointage: boolean;
 }
