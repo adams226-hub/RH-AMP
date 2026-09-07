@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { ErreurApi, api } from '../api/client';
+import { Badge } from '../components/Badge';
 import { BadgeStatut } from '../components/BadgeStatut';
 import { ChampRecherche } from '../components/ChampRecherche';
 import { EnTeteTriable } from '../components/EnTeteTriable';
@@ -12,7 +13,7 @@ import { Pagination } from '../components/Pagination';
 import { TuileStat } from '../components/TuileStat';
 import { useAuth } from '../context/AuthContext';
 import { useTri } from '../hooks/useTri';
-import { Employe, StatutEmploye } from '../types/employe';
+import { Employe, ResumeRhEmploye, StatutEmploye } from '../types/employe';
 import { Chantier } from '../types/pointage';
 import { Filiale } from '../types/postes';
 import { CategorieProfessionnelle } from '../types/categoriesProfessionnelles';
@@ -72,6 +73,7 @@ export function Employes() {
   const [nouvelleFiliale, setNouvelleFiliale] = useState('');
   const [champs, setChamps] = useState(ETAT_INITIAL);
   const [employeSelectionne, setEmployeSelectionne] = useState<Employe | null>(null);
+  const [resumeRh, setResumeRh] = useState<ResumeRhEmploye | null>(null);
 
   const [recherche, setRecherche] = useState('');
   const [filtreStatut, setFiltreStatut] = useState('');
@@ -110,6 +112,14 @@ export function Employes() {
     if (!jeton) return;
     api.listerCategoriesProfessionnelles(jeton).then(setCategories);
   }, [jeton]);
+
+  useEffect(() => {
+    if (!jeton || !employeSelectionne) {
+      setResumeRh(null);
+      return;
+    }
+    api.obtenirResumeRhEmploye(jeton, employeSelectionne.id).then(setResumeRh);
+  }, [jeton, employeSelectionne?.id]);
 
   const categoriesVisibles = useMemo(() => categories.filter((c) => c.actif), [categories]);
   const nomChantier = (id: string | null) => chantiers.find((c) => c.id === id)?.nom ?? null;
@@ -607,6 +617,37 @@ export function Employes() {
               <dd className="mt-0.5 text-slate-800">{employeSelectionne.soumisPointage ? 'Oui' : 'Non'}</dd>
             )}
           </div>
+
+          {resumeRh && (
+            <div className="mt-4 border-t border-slate-100 pt-4">
+              <div className="mb-2 flex items-center justify-between">
+                <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                  Congés et absences — {resumeRh.annee}
+                </dt>
+                {resumeRh.enMission && <Badge couleur="accent">En mission</Badge>}
+              </div>
+              <div className="grid grid-cols-3 gap-3 text-sm">
+                <div>
+                  <dt className="text-xs text-slate-500">Absences validées</dt>
+                  <dd className="mt-0.5 font-medium text-slate-800">{resumeRh.joursAbsenceValides} j</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-slate-500">Congés pris</dt>
+                  <dd className="mt-0.5 font-medium text-slate-800">{resumeRh.congesPris} j</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-slate-500">Solde restant</dt>
+                  <dd className="mt-0.5 font-medium text-slate-800">{resumeRh.soldeConges} j</dd>
+                </div>
+              </div>
+              {resumeRh.enMission && (
+                <p className="mt-2 text-xs text-slate-500">
+                  {resumeRh.missionDestination}
+                  {resumeRh.missionDateRetourPrevue && ` — retour prévu le ${formaterDateFr(resumeRh.missionDateRetourPrevue)}`}
+                </p>
+              )}
+            </div>
+          )}
         </Modale>
       )}
     </MiseEnPage>

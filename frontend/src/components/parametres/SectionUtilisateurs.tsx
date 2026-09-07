@@ -20,6 +20,46 @@ const CHAMP =
 const BOUTON =
   'rounded-md bg-primary-700 px-4 py-2 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-800 hover:shadow-md disabled:pointer-events-none disabled:opacity-60';
 
+// Liste à cocher toujours visible (pas de menu déroulant en `position: absolute`) — utilisée dans
+// la modale Périmètre, dont le conteneur défilant (Modale.tsx, `overflow-y-auto`) rogne tout menu
+// positionné en absolu qui tenterait de flotter par-dessus (cf. bug remonté sur SelecteurMulti).
+function ListeCoches({
+  options,
+  valeurs,
+  onChange,
+}: {
+  options: { valeur: string; libelle: string }[];
+  valeurs: string[];
+  onChange: (valeurs: string[]) => void;
+}) {
+  function basculer(valeur: string) {
+    onChange(valeurs.includes(valeur) ? valeurs.filter((v) => v !== valeur) : [...valeurs, valeur]);
+  }
+
+  if (options.length === 0) {
+    return <p className="text-xs text-slate-400">Aucune option disponible.</p>;
+  }
+
+  return (
+    <div className="max-h-48 space-y-0.5 overflow-y-auto rounded-md border border-slate-200 p-2">
+      {options.map((o) => (
+        <label
+          key={o.valeur}
+          className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors duration-200 hover:bg-slate-50"
+        >
+          <input
+            type="checkbox"
+            checked={valeurs.includes(o.valeur)}
+            onChange={() => basculer(o.valeur)}
+            className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+          />
+          {o.libelle}
+        </label>
+      ))}
+    </div>
+  );
+}
+
 const LIBELLES_ROLE: Record<CodeRole, string> = {
   super_admin: 'Super Admin',
   drh_holding: 'DRH Holding',
@@ -84,6 +124,11 @@ export function SectionUtilisateurs() {
 
   const [motDePasseAffiche, setMotDePasseAffiche] = useState<{ email: string; motDePasse: string } | null>(null);
   const [actionEnCoursId, setActionEnCoursId] = useState<string | null>(null);
+
+  const [perimetreEnEdition, setPerimetreEnEdition] = useState<Utilisateur | null>(null);
+  const [filialeIdsEdition, setFilialeIdsEdition] = useState<string[]>([]);
+  const [chantierIdsEdition, setChantierIdsEdition] = useState<string[]>([]);
+  const [perimetreEnCours, setPerimetreEnCours] = useState(false);
 
   function rafraichir() {
     if (!jeton) return;
@@ -171,6 +216,31 @@ export function SectionUtilisateurs() {
       setErreur(e instanceof ErreurApi ? e.message : 'Erreur lors du changement de statut');
     } finally {
       setActionEnCoursId(null);
+    }
+  }
+
+  function ouvrirPerimetre(u: Utilisateur) {
+    setPerimetreEnEdition(u);
+    setFilialeIdsEdition(u.filialeIds);
+    setChantierIdsEdition(u.chantierIds);
+  }
+
+  async function enregistrerPerimetre(evenement: FormEvent) {
+    evenement.preventDefault();
+    if (!jeton || !perimetreEnEdition) return;
+
+    setPerimetreEnCours(true);
+    try {
+      await api.majPerimetreUtilisateur(jeton, perimetreEnEdition.id, {
+        filialeIds: perimetreEnEdition.role === 'rh_filiale' ? filialeIdsEdition : undefined,
+        chantierIds: perimetreEnEdition.role === 'responsable_rh_chantier' ? chantierIdsEdition : undefined,
+      });
+      setPerimetreEnEdition(null);
+      rafraichir();
+    } catch (e) {
+      setErreur(e instanceof ErreurApi ? e.message : 'Erreur lors de la mise à jour du périmètre');
+    } finally {
+      setPerimetreEnCours(false);
     }
   }
 
@@ -309,6 +379,14 @@ export function SectionUtilisateurs() {
                     <td className="px-4 py-3 text-right">
                       {peutModifier && (
                         <div className="flex justify-end gap-3">
+                          {(u.role === 'rh_filiale' || u.role === 'responsable_rh_chantier') && (
+                            <button
+                              onClick={() => ouvrirPerimetre(u)}
+                              className="font-medium text-primary-700 transition-colors duration-200 hover:underline"
+                            >
+                              Périmètre
+                            </button>
+                          )}
                           <button
                             disabled={actionEnCoursId === u.id}
                             onClick={() => reinitialiser(u)}
@@ -355,6 +433,36 @@ export function SectionUtilisateurs() {
           />
         )}
       </div>
+
+      {perimetreEnEdition && (
+        <Modale titre={`Périmètre — ${perimetreEnEdition.email}`} onFermer={() => setPerimetreEnEdition(null)}>
+          <form onSubmit={enregistrerPerimetre}>
+            {perimetreEnEdition.role === 'rh_filiale' && (
+              <div>
+                <p className="mb-1 text-xs font-medium text-slate-600">Filiale(s) gérée(s)</p>
+                <ListeCoches
+                  options={filiales.map((f) => ({ valeur: f.id, libelle: f.nom }))}
+                  valeurs={filialeIdsEdition}
+                  onChange={setFilialeIdsEdition}
+                />
+              </div>
+            )}
+            {perimetreEnEdition.role === 'responsable_rh_chantier' && (
+              <div>
+                <p className="mb-1 text-xs font-medium text-slate-600">Chantier(s) géré(s)</p>
+                <ListeCoches
+                  options={chantiers.map((c) => ({ valeur: c.id, libelle: c.nom }))}
+                  valeurs={chantierIdsEdition}
+                  onChange={setChantierIdsEdition}
+                />
+              </div>
+            )}
+            <button disabled={perimetreEnCours} className={`${BOUTON} mt-4`}>
+              {perimetreEnCours ? 'Enregistrement...' : 'Enregistrer'}
+            </button>
+          </form>
+        </Modale>
+      )}
 
       {motDePasseAffiche && (
         <Modale titre="Mot de passe temporaire" onFermer={() => setMotDePasseAffiche(null)}>

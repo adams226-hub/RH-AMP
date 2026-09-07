@@ -17,7 +17,7 @@ CREATE TYPE statut_utilisateur AS ENUM ('actif', 'suspendu', 'supprime');
 
 CREATE TYPE statut_employe AS ENUM ('en_cours_creation', 'actif', 'suspendu', 'sorti');
 
-CREATE TYPE type_contrat AS ENUM ('cdi', 'cdd', 'stage');
+CREATE TYPE type_contrat AS ENUM ('cdi', 'cdd', 'stage', 'cdc'); -- cdc = Contrat à Durée de Chantier
 CREATE TYPE statut_contrat AS ENUM ('brouillon', 'signe', 'actif', 'renouvele', 'expire', 'rompu', 'termine');
 
 CREATE TYPE statut_demande_conge AS ENUM ('brouillon', 'soumise', 'avis_favorable', 'avis_defavorable', 'validee_rh', 'rejetee_rh', 'annulee');

@@ -7,7 +7,14 @@ import { MiseEnPage } from '../components/MiseEnPage';
 import { Modale } from '../components/Modale';
 import { SelecteurEmploye } from '../components/SelecteurEmploye';
 import { useAuth } from '../context/AuthContext';
-import { AnomalieAbsence, Chantier, CodeAbsencePointage, PointageMensuelAvecDetails, StatutPointageMensuel } from '../types/pointage';
+import {
+  AnomalieAbsence,
+  Chantier,
+  CodeAbsencePointage,
+  EmployeAvecPointage,
+  PointageMensuelAvecDetails,
+  StatutPointageMensuel,
+} from '../types/pointage';
 import { formaterDateFr } from '../utils/date';
 import { construireSemaines, quantiemeDuMois } from '../utils/pointageGrille';
 
@@ -37,13 +44,26 @@ function moisCourantISO() {
   return new Date().toISOString().slice(0, 7) + '-01';
 }
 
-const LIBELLES_CODE_ABSENCE: Record<CodeAbsencePointage, string> = {
-  absence_injustifiee: 'ABI — Absence injustifiée',
-  repos_medical: 'RM — Repos médical',
-  permission_non_payee: 'PNP — Permission non payée',
-  permission_payee: 'PP — Permission payée',
-  conge_annuel: 'CA — Congé annuel',
-  ferie: 'F — Jour férié (non travaillé)',
+// Code court uniquement dans le <select> de la grille — une cellule fait ~60-80px de large,
+// le libellé complet y déborde et se coupe (rendu cassé signalé par l'utilisateur). Le sens de
+// chaque code est donné par la légende sous la grille (LEGENDE_CODE_ABSENCE) plutôt que répété
+// dans chaque case.
+const CODES_ABSENCE_COURTS: Record<CodeAbsencePointage, string> = {
+  absence_injustifiee: 'ABI',
+  repos_medical: 'RM',
+  permission_non_payee: 'PNP',
+  permission_payee: 'PP',
+  conge_annuel: 'CA',
+  ferie: 'F',
+};
+
+const LEGENDE_CODE_ABSENCE: Record<CodeAbsencePointage, string> = {
+  absence_injustifiee: 'ABI = Absence injustifiée',
+  repos_medical: 'RM = Repos médical',
+  permission_non_payee: 'PNP = Permission non payée',
+  permission_payee: 'PP = Permission payée',
+  conge_annuel: 'CA = Congé annuel',
+  ferie: 'F = Jour férié (non travaillé)',
 };
 
 interface SaisieJour {
@@ -71,6 +91,11 @@ export function Pointage() {
   const [envoiEnCours, setEnvoiEnCours] = useState(false);
   const [soumissionEnCours, setSoumissionEnCours] = useState(false);
 
+  // --- Effectif du chantier (saisie « chantier d'abord ») ---
+  const [roster, setRoster] = useState<EmployeAvecPointage[]>([]);
+  const [chargementRoster, setChargementRoster] = useState(false);
+  const [rechercheAutre, setRechercheAutre] = useState(false);
+
   // --- File d'attente RH siège ---
   const [fileAttente, setFileAttente] = useState<PointageMensuelAvecDetails[]>([]);
   const [chargementFile, setChargementFile] = useState(false);
@@ -80,6 +105,12 @@ export function Pointage() {
   const [ficheARejeter, setFicheARejeter] = useState<PointageMensuelAvecDetails | null>(null);
   const [commentaireRejet, setCommentaireRejet] = useState('');
   const [ficheEnCours, setFicheEnCoursId] = useState<string | null>(null);
+
+  // --- Export Excel ---
+  const [exportChantierId, setExportChantierId] = useState('');
+  const [exportStatut, setExportStatut] = useState('');
+  const [exportMois, setExportMois] = useState(() => new Date().toISOString().slice(0, 7));
+  const [exportEnCours, setExportEnCours] = useState(false);
 
   useEffect(() => {
     if (!jeton) return;
@@ -120,6 +151,26 @@ export function Pointage() {
 
   useEffect(chargerFicheExistante, [jeton, employeId, periodeFin]);
 
+  function rafraichirRoster() {
+    if (!jeton || !chantierId || !periodeFin) {
+      setRoster([]);
+      return;
+    }
+    const moisPaie = periodeFin.slice(0, 7) + '-01';
+    setChargementRoster(true);
+    api
+      .listerEmployesChantier(jeton, chantierId, moisPaie)
+      .then(setRoster)
+      .catch((e) => setErreur(e instanceof ErreurApi ? e.message : "Erreur lors du chargement de l'effectif"))
+      .finally(() => setChargementRoster(false));
+  }
+
+  useEffect(rafraichirRoster, [jeton, chantierId, periodeFin]);
+
+  function choisirEmployeRoster(id: string) {
+    setEmployeId(id);
+  }
+
   const semaines = useMemo(
     () => (periodeDebut && periodeFin ? construireSemaines(periodeDebut, periodeFin) : []),
     [periodeDebut, periodeFin]
@@ -155,6 +206,7 @@ export function Pointage() {
         jours: joursSaisis,
       });
       chargerFicheExistante();
+      rafraichirRoster();
     } catch (e) {
       setErreur(e instanceof ErreurApi ? e.message : "Erreur lors de l'enregistrement");
     } finally {
@@ -168,6 +220,7 @@ export function Pointage() {
     try {
       await api.soumettreFichePointage(jeton, ficheCourante.id);
       chargerFicheExistante();
+      rafraichirRoster();
     } catch (e) {
       setErreur(e instanceof ErreurApi ? e.message : 'Erreur lors de la soumission');
     } finally {
@@ -229,6 +282,25 @@ export function Pointage() {
     }
   }
 
+  async function telechargerExcel() {
+    if (!jeton) return;
+    setExportEnCours(true);
+    setErreur(null);
+    try {
+      const blob = await api.exporterPointageExcel(jeton, `${exportMois}-01`, exportStatut || undefined, exportChantierId || undefined);
+      const url = URL.createObjectURL(blob);
+      const lien = document.createElement('a');
+      lien.href = url;
+      lien.download = `pointage-${exportMois}.xlsx`;
+      lien.click();
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (e) {
+      setErreur(e instanceof ErreurApi ? e.message : "Erreur lors de l'export Excel");
+    } finally {
+      setExportEnCours(false);
+    }
+  }
+
   return (
     <MiseEnPage>
       <h2 className="mb-1 text-lg font-semibold text-slate-900">Pointage</h2>
@@ -283,17 +355,17 @@ export function Pointage() {
       )}
 
       {peutSaisir && (
-        <form onSubmit={enregistrer} className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h3 className="mb-3 text-sm font-semibold text-slate-800">Fiche de pointage mensuelle</h3>
-          <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div className="col-span-2">
-              <label className={LABEL}>Employé</label>
-              <SelecteurEmploye valeur={employeId} onChange={setEmployeId} />
+        <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h3 className="mb-3 text-sm font-semibold text-slate-800">Export Pointage</h3>
+          <div className="flex flex-wrap items-end gap-3">
+            <div>
+              <label className={LABEL}>Mois</label>
+              <input type="month" value={exportMois} onChange={(e) => setExportMois(e.target.value)} className={CHAMP} />
             </div>
             <div>
               <label className={LABEL}>Chantier</label>
-              <select value={chantierId} onChange={(e) => setChantierId(e.target.value)} required className={CHAMP}>
-                <option value="">— Choisir —</option>
+              <select value={exportChantierId} onChange={(e) => setExportChantierId(e.target.value)} className={CHAMP}>
+                <option value="">Tous</option>
                 {chantiers.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.nom}
@@ -303,23 +375,49 @@ export function Pointage() {
             </div>
             <div>
               <label className={LABEL}>Statut</label>
-              <div className="pt-1.5">
-                {ficheCourante ? (
-                  <Badge couleur={COULEURS_STATUT[ficheCourante.statut]}>{LIBELLES_STATUT[ficheCourante.statut]}</Badge>
-                ) : (
-                  <span className="text-xs text-slate-400">Nouvelle fiche</span>
-                )}
-              </div>
+              <select value={exportStatut} onChange={(e) => setExportStatut(e.target.value)} className={CHAMP}>
+                <option value="">Tous</option>
+                {(Object.keys(LIBELLES_STATUT) as StatutPointageMensuel[]).map((s) => (
+                  <option key={s} value={s}>
+                    {LIBELLES_STATUT[s]}
+                  </option>
+                ))}
+              </select>
             </div>
+            <button type="button" disabled={exportEnCours} onClick={telechargerExcel} className={BOUTON}>
+              {exportEnCours ? 'Génération...' : 'Télécharger en Excel'}
+            </button>
           </div>
+          <p className="mt-2 text-xs text-slate-400">
+            Fichier .xlsx — détail hebdomadaire (onglet « decorticage ») et fiche horaire par employé, pour les fiches
+            correspondant aux filtres ci-dessus.
+          </p>
+        </div>
+      )}
 
-          {ficheCourante?.statut === 'rejete' && ficheCourante.commentaireRejet && (
-            <div className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-              Rejetée : {ficheCourante.commentaireRejet}
-            </div>
-          )}
-
+      {peutSaisir && (
+        <form onSubmit={enregistrer} className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h3 className="mb-3 text-sm font-semibold text-slate-800">Fiche de pointage mensuelle</h3>
           <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div>
+              <label className={LABEL}>Chantier</label>
+              <select
+                value={chantierId}
+                onChange={(e) => {
+                  setChantierId(e.target.value);
+                  setEmployeId('');
+                }}
+                required
+                className={CHAMP}
+              >
+                <option value="">— Choisir —</option>
+                {chantiers.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.nom}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div>
               <label className={LABEL}>Période du</label>
               <input type="date" value={periodeDebut} onChange={(e) => setPeriodeDebut(e.target.value)} required className={CHAMP} />
@@ -335,9 +433,90 @@ export function Pointage() {
                 className={CHAMP}
               />
             </div>
+            <div>
+              <label className={LABEL}>Statut de la fiche</label>
+              <div className="pt-1.5">
+                {!employeId ? (
+                  <span className="text-xs text-slate-400">— </span>
+                ) : ficheCourante ? (
+                  <Badge couleur={COULEURS_STATUT[ficheCourante.statut]}>{LIBELLES_STATUT[ficheCourante.statut]}</Badge>
+                ) : (
+                  <span className="text-xs text-slate-400">Nouvelle fiche</span>
+                )}
+              </div>
+            </div>
           </div>
 
-          {semaines.length > 0 && (
+          {chantierId && periodeFin && (
+            <div className="mb-4">
+              <div className="mb-1 flex items-center justify-between">
+                <label className={LABEL}>Effectif du chantier{roster.length > 0 ? ` — ${roster.length} employé(s)` : ''}</label>
+                <button
+                  type="button"
+                  onClick={() => setRechercheAutre((v) => !v)}
+                  className="mb-1 text-xs font-medium text-primary-700 hover:underline"
+                >
+                  {rechercheAutre ? 'Masquer la recherche' : 'Employé hors effectif ?'}
+                </button>
+              </div>
+
+              {rechercheAutre && (
+                <div className="mb-3">
+                  <SelecteurEmploye valeur={employeId} onChange={setEmployeId} />
+                </div>
+              )}
+
+              {chargementRoster ? (
+                <div className="space-y-2">
+                  {[...Array(3)].map((_, i) => (
+                    <div key={i} className="h-9 animate-pulse rounded bg-slate-100" />
+                  ))}
+                </div>
+              ) : roster.length > 0 ? (
+                <div className="overflow-hidden rounded-md border border-slate-200">
+                  <table className="w-full text-sm">
+                    <tbody className="divide-y divide-slate-100">
+                      {roster.map((r) => (
+                        <tr
+                          key={r.employeId}
+                          onClick={() => choisirEmployeRoster(r.employeId)}
+                          className={`cursor-pointer transition-colors duration-200 hover:bg-slate-50 ${
+                            employeId === r.employeId ? 'bg-primary-50' : ''
+                          }`}
+                        >
+                          <td className="px-3 py-2 font-medium text-slate-900">
+                            {r.nom} {r.prenoms}
+                          </td>
+                          <td className="px-3 py-2 text-slate-500">{r.matricule}</td>
+                          <td className="px-3 py-2 text-right">
+                            {r.statut ? (
+                              <Badge couleur={COULEURS_STATUT[r.statut]}>{LIBELLES_STATUT[r.statut]}</Badge>
+                            ) : (
+                              <span className="text-xs text-slate-400">Non commencé</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <EtatVide
+                  icone={<IconePointage />}
+                  titre="Aucun employé"
+                  message="Aucun employé actif n'est affecté à ce chantier — utilisez « Employé hors effectif » ci-dessus si besoin."
+                />
+              )}
+            </div>
+          )}
+
+          {ficheCourante?.statut === 'rejete' && ficheCourante.commentaireRejet && (
+            <div className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+              Rejetée : {ficheCourante.commentaireRejet}
+            </div>
+          )}
+
+          {employeId && semaines.length > 0 && (
             <div className="mb-3">
               <label className={LABEL}>Grille journalière — heures travaillées ou code d'absence</label>
               <div className="overflow-x-auto rounded-md border border-slate-200">
@@ -381,9 +560,9 @@ export function Pointage() {
                                     className="w-full rounded border border-slate-300 px-1 py-0.5 text-[10px] focus:border-primary-500 focus:outline-none"
                                   >
                                     <option value="">—</option>
-                                    {(Object.keys(LIBELLES_CODE_ABSENCE) as CodeAbsencePointage[]).map((code) => (
-                                      <option key={code} value={code}>
-                                        {LIBELLES_CODE_ABSENCE[code]}
+                                    {(Object.keys(CODES_ABSENCE_COURTS) as CodeAbsencePointage[]).map((code) => (
+                                      <option key={code} value={code} title={LEGENDE_CODE_ABSENCE[code]}>
+                                        {CODES_ABSENCE_COURTS[code]}
                                       </option>
                                     ))}
                                   </select>
@@ -398,6 +577,11 @@ export function Pointage() {
                   </tbody>
                 </table>
               </div>
+              <p className="mt-1.5 text-[11px] text-slate-400">
+                {(Object.keys(LEGENDE_CODE_ABSENCE) as CodeAbsencePointage[])
+                  .map((code) => LEGENDE_CODE_ABSENCE[code])
+                  .join(' · ')}
+              </p>
             </div>
           )}
 
@@ -432,35 +616,39 @@ export function Pointage() {
               </p>
             </div>
           )}
-          <p className="mb-3 text-[11px] text-slate-400">
-            Heures sup., panier et absences sont calculés automatiquement depuis la grille, après enregistrement.
-          </p>
+          {employeId && (
+            <>
+              <p className="mb-3 text-[11px] text-slate-400">
+                Heures sup., panier et absences sont calculés automatiquement depuis la grille, après enregistrement.
+              </p>
 
-          <div className="flex gap-3">
-            <button disabled={envoiEnCours} className={BOUTON}>
-              {envoiEnCours ? 'Enregistrement...' : 'Enregistrer le brouillon'}
-            </button>
-            {ficheCourante && (ficheCourante.statut === 'brouillon' || ficheCourante.statut === 'rejete') && (
-              <button
-                type="button"
-                disabled={soumissionEnCours}
-                onClick={soumettre}
-                className="rounded-md border border-primary-600 px-4 py-2 text-sm font-medium text-primary-700 transition-colors duration-200 hover:bg-primary-50 disabled:opacity-50"
-              >
-                {soumissionEnCours ? 'Envoi...' : 'Soumettre au RH siège'}
-              </button>
-            )}
-            {ficheCourante && (
-              <button
-                type="button"
-                disabled={ficheEnCours === ficheCourante.id}
-                onClick={() => telechargerPdf(ficheCourante.id)}
-                className="ml-auto font-medium text-primary-700 hover:underline"
-              >
-                Fiche PDF
-              </button>
-            )}
-          </div>
+              <div className="flex gap-3">
+                <button disabled={envoiEnCours} className={BOUTON}>
+                  {envoiEnCours ? 'Enregistrement...' : 'Enregistrer le brouillon'}
+                </button>
+                {ficheCourante && (ficheCourante.statut === 'brouillon' || ficheCourante.statut === 'rejete') && (
+                  <button
+                    type="button"
+                    disabled={soumissionEnCours}
+                    onClick={soumettre}
+                    className="rounded-md border border-primary-600 px-4 py-2 text-sm font-medium text-primary-700 transition-colors duration-200 hover:bg-primary-50 disabled:opacity-50"
+                  >
+                    {soumissionEnCours ? 'Envoi...' : 'Soumettre au RH siège'}
+                  </button>
+                )}
+                {ficheCourante && (
+                  <button
+                    type="button"
+                    disabled={ficheEnCours === ficheCourante.id}
+                    onClick={() => telechargerPdf(ficheCourante.id)}
+                    className="ml-auto font-medium text-primary-700 hover:underline"
+                  >
+                    Fiche PDF
+                  </button>
+                )}
+              </div>
+            </>
+          )}
         </form>
       )}
 

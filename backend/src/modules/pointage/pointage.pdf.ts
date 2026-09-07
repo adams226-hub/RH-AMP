@@ -4,13 +4,13 @@ import { ErreurApplicative } from '../../middleware/gestionErreurs';
 import { calculerPointageDepuisJours } from './pointage.calcul';
 import { CodeAbsencePointage } from './pointage.types';
 
-interface JourBrut {
+export interface JourBrut {
   date: Date;
   heures: number | null;
   codeAbsence: CodeAbsencePointage | null;
 }
 
-interface DonneesFiche {
+export interface DonneesFiche {
   matricule: string;
   nom: string;
   prenoms: string;
@@ -25,7 +25,7 @@ interface DonneesFiche {
   joursFeries: Set<string>;
 }
 
-const CODE_ABREGE: Record<CodeAbsencePointage, string> = {
+export const CODE_ABREGE: Record<CodeAbsencePointage, string> = {
   absence_injustifiee: 'ABI',
   repos_medical: 'RM',
   permission_non_payee: 'PNP',
@@ -34,7 +34,7 @@ const CODE_ABREGE: Record<CodeAbsencePointage, string> = {
   ferie: 'F',
 };
 
-async function chargerDonneesFiche(id: string): Promise<DonneesFiche> {
+export async function chargerDonneesFiche(id: string): Promise<DonneesFiche> {
   const { rows } = await pool.query(
     `SELECT p.*, e.matricule, e.nom, e.prenoms, e.statut AS statut_employe, c.nom AS chantier_nom,
             fo.intitule AS fonction_intitule, e.categorie_professionnelle,
@@ -96,7 +96,7 @@ function formaterDateFr(d: Date | string): string {
 // sont des chaînes 'AAAA-MM-JJ' (colonnes DATE renvoyées en texte brut, cf. config/db.ts) — Date
 // les parse correctement en argument de constructeur, mais ne jamais les comparer à un Date avec
 // >=/<= ensuite (toujours false : Date coercée en nombre, chaîne non numérique).
-function construireSemaines(debut: string, fin: string): Date[][] {
+export function construireSemaines(debut: string, fin: string): Date[][] {
   const semaines: Date[][] = [];
   const curseur = new Date(debut);
   const bornefin = new Date(fin);

@@ -219,6 +219,7 @@ export function Contrats() {
               <select value={type} onChange={(e) => setType(e.target.value as TypeContrat)} className={CHAMP}>
                 <option value="cdi">CDI</option>
                 <option value="cdd">CDD</option>
+                <option value="cdc">CDC — Contrat à durée de chantier</option>
                 <option value="stage">Stage</option>
               </select>
             </div>
@@ -329,6 +330,7 @@ export function Contrats() {
           options={[
             { valeur: 'cdi', libelle: 'CDI' },
             { valeur: 'cdd', libelle: 'CDD' },
+            { valeur: 'cdc', libelle: 'CDC' },
             { valeur: 'stage', libelle: 'Stage' },
           ]}
         />
@@ -495,7 +497,7 @@ function FormulaireRenouvellement({
           <input type="date" value={dateDebut} onChange={(e) => setDateDebut(e.target.value)} required className={CHAMP + ' w-full'} />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-600">Nouvelle date de fin (si CDD/Stage)</label>
+          <label className="mb-1 block text-xs font-medium text-slate-600">Nouvelle date de fin (si CDD/CDC/Stage)</label>
           <input type="date" value={dateFin} onChange={(e) => setDateFin(e.target.value)} className={CHAMP + ' w-full'} />
         </div>
         <div>

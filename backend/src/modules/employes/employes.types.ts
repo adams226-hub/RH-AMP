@@ -31,6 +31,19 @@ export interface Employe {
   soumisPointage: boolean;
 }
 
+// Résumé affiché sur la fiche employé (écran Employés) — congés/absences de l'année en cours
+// uniquement, et seulement les absences validées par la RH (une demande en brouillon ou en
+// attente ne doit pas apparaître comme un fait acquis).
+export interface ResumeRhEmploye {
+  annee: number;
+  joursAbsenceValides: number;
+  congesPris: number;
+  soldeConges: number;
+  enMission: boolean;
+  missionDestination: string | null;
+  missionDateRetourPrevue: string | null;
+}
+
 export interface CreationEmploye {
   matricule: string;
   nom: string;

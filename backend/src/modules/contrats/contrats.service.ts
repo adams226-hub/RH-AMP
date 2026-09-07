@@ -79,7 +79,7 @@ export async function obtenirContrat(id: string): Promise<Contrat | null> {
 
 export async function creerContrat(donnees: CreationContrat): Promise<Contrat> {
   if (donnees.type !== 'cdi' && !donnees.dateFin) {
-    throw new ErreurApplicative(400, 'date_fin est obligatoire pour un CDD ou un Stage');
+    throw new ErreurApplicative(400, 'date_fin est obligatoire pour un CDD, un CDC ou un Stage');
   }
 
   const { rows } = await pool.query(

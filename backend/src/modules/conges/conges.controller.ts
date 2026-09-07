@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import { ErreurApplicative } from '../../middleware/gestionErreurs';
-import { filialesAutoriseesPour } from '../../middleware/autorisation';
+import { chantiersAutorisesPour, filialesAutoriseesPour } from '../../middleware/autorisation';
 import {
   creerDemande,
   donnerAvisHierarchique,
@@ -47,8 +47,10 @@ export async function demandesListe(req: Request, res: Response) {
     return;
   }
 
-  const filiales = filialesAutoriseesPour(req.utilisateur!);
-  res.json(await listerToutesDemandes(filiales, req.query.statut as string | undefined));
+  const utilisateur = req.utilisateur!;
+  const filiales = filialesAutoriseesPour(utilisateur);
+  const chantiers = await chantiersAutorisesPour(utilisateur.sub, utilisateur.role, filiales);
+  res.json(await listerToutesDemandes(filiales, chantiers, req.query.statut as string | undefined));
 }
 
 export async function demandesCreer(req: Request, res: Response) {

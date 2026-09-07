@@ -73,6 +73,18 @@ export interface SaisiePointageMensuel {
   jours?: { date: string; heures?: number; codeAbsence?: CodeAbsencePointage }[];
 }
 
+// Effectif d'un chantier pour un mois donné — alimente l'écran de saisie « chantier d'abord » :
+// on choisit le chantier/la période une fois, puis on voit qui a déjà une fiche (et son statut)
+// plutôt que de rechercher chaque employé un par un.
+export interface EmployeAvecPointage {
+  employeId: string;
+  matricule: string;
+  nom: string;
+  prenoms: string;
+  ficheId: string | null;
+  statut: StatutPointageMensuel | null;
+}
+
 export interface AnomalieAbsence {
   date: string;
   code: CodeAbsencePointage;

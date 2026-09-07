@@ -1,4 +1,5 @@
-export type TypeContrat = 'cdi' | 'cdd' | 'stage';
+// cdc = Contrat à Durée de Chantier
+export type TypeContrat = 'cdi' | 'cdd' | 'stage' | 'cdc';
 export type StatutContrat = 'brouillon' | 'signe' | 'actif' | 'renouvele' | 'expire' | 'rompu' | 'termine';
 
 export interface Contrat {

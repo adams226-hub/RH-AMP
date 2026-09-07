@@ -92,13 +92,19 @@ export async function obtenirSoldePermission(employeId: string, annee: number): 
   }
 }
 
-export async function obtenirDemandePourAcces(id: string): Promise<{ employeId: string; filialeId: string } | null> {
+export async function obtenirDemandePourAcces(
+  id: string
+): Promise<{ employeId: string; filialeId: string; chantierId: string | null } | null> {
   const { rows } = await pool.query(
-    `SELECT d.employe_id, e.filiale_id FROM demandes_absences d JOIN employes e ON e.id = d.employe_id WHERE d.id = $1`,
+    `SELECT d.employe_id, e.filiale_id, e.chantier_id FROM demandes_absences d JOIN employes e ON e.id = d.employe_id WHERE d.id = $1`,
     [id]
   );
   if (!rows[0]) return null;
-  return { employeId: rows[0].employe_id as string, filialeId: rows[0].filiale_id as string };
+  return {
+    employeId: rows[0].employe_id as string,
+    filialeId: rows[0].filiale_id as string,
+    chantierId: rows[0].chantier_id as string | null,
+  };
 }
 
 export async function listerDemandesEmploye(employeId: string): Promise<DemandeAbsence[]> {
@@ -109,8 +115,11 @@ export async function listerDemandesEmploye(employeId: string): Promise<DemandeA
   return rows.map(mapDemande);
 }
 
+// chantiersAutorisees couvre le Responsable RH Chantier, jamais rattaché à une filiale (cf.
+// employes.service.ts / middleware/autorisation.ts pour le même raisonnement).
 export async function listerToutesDemandes(
   filialesAutorisees: string[] | null,
+  chantiersAutorisees: string[] | null = null,
   statut?: string
 ): Promise<DemandeAbsenceAvecEmploye[]> {
   const conditions: string[] = [];
@@ -118,7 +127,10 @@ export async function listerToutesDemandes(
 
   if (filialesAutorisees !== null) {
     valeurs.push(filialesAutorisees);
-    conditions.push(`e.filiale_id = ANY($${valeurs.length})`);
+    const iFiliales = valeurs.length;
+    valeurs.push(chantiersAutorisees ?? []);
+    const iChantiers = valeurs.length;
+    conditions.push(`(e.filiale_id = ANY($${iFiliales}) OR e.chantier_id = ANY($${iChantiers}))`);
   }
 
   if (statut) {

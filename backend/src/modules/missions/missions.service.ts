@@ -33,13 +33,21 @@ function mapMission(l: Record<string, unknown>): Mission {
   };
 }
 
-export async function listerMissions(filialesAutorisees: string[] | null): Promise<MissionAvecEmploye[]> {
+// chantiersAutorisees couvre le Responsable RH Chantier, jamais rattaché à une filiale (cf.
+// employes.service.ts / middleware/autorisation.ts pour le même raisonnement).
+export async function listerMissions(
+  filialesAutorisees: string[] | null,
+  chantiersAutorisees: string[] | null = null
+): Promise<MissionAvecEmploye[]> {
   const conditions: string[] = [];
   const valeurs: unknown[] = [];
 
   if (filialesAutorisees !== null) {
     valeurs.push(filialesAutorisees);
-    conditions.push(`e.filiale_id = ANY($${valeurs.length})`);
+    const iFiliales = valeurs.length;
+    valeurs.push(chantiersAutorisees ?? []);
+    const iChantiers = valeurs.length;
+    conditions.push(`(e.filiale_id = ANY($${iFiliales}) OR e.chantier_id = ANY($${iChantiers}))`);
   }
 
   const clauseWhere = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';

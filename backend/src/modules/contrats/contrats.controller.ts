@@ -24,7 +24,7 @@ const composantesRemuneration = {
 
 const schemaCreation = z.object({
   employeId: z.string().uuid(),
-  type: z.enum(['cdi', 'cdd', 'stage']),
+  type: z.enum(['cdi', 'cdd', 'stage', 'cdc']),
   dateDebut: z.string(),
   dateFin: z.string().optional(),
   dureeEssaiJours: z.number().int().positive().optional(),

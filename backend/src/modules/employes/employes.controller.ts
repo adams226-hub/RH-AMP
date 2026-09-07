@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import { ErreurApplicative } from '../../middleware/gestionErreurs';
-import { filialesAutoriseesPour } from '../../middleware/autorisation';
+import { chantiersAutorisesPour, filialesAutoriseesPour } from '../../middleware/autorisation';
 import {
   affecterChantierEmploye,
   changerStatutEmploye,
@@ -9,6 +9,7 @@ import {
   definirSoumisPointage,
   listerEmployes,
   obtenirEmploye,
+  obtenirResumeRhEmploye,
 } from './employes.service';
 
 const schemaStatut = z.object({
@@ -48,10 +49,27 @@ const schemaCreationEmploye = z.object({
 });
 
 export async function lister(req: Request, res: Response) {
-  const filiales = filialesAutoriseesPour(req.utilisateur!);
+  const utilisateur = req.utilisateur!;
+  const filiales = filialesAutoriseesPour(utilisateur);
+  const chantiers = await chantiersAutorisesPour(utilisateur.sub, utilisateur.role, filiales);
   const recherche = req.query.recherche as string | undefined;
   const limite = req.query.limite ? Number(req.query.limite) : undefined;
-  res.json(await listerEmployes(filiales, recherche, limite));
+  res.json(await listerEmployes(filiales, chantiers, recherche, limite));
+}
+
+// Un employé est dans le périmètre si sa filiale y est, OU si son chantier y est (Responsable RH
+// Chantier n'est jamais rattaché à une filiale — cf. chantiersAutorisesPour).
+async function verifierAccesEmploye(req: Request, filialeId: string, chantierId: string | null): Promise<void> {
+  const utilisateur = req.utilisateur!;
+  const filiales = filialesAutoriseesPour(utilisateur);
+  if (filiales === null || filiales.includes(filialeId)) return;
+
+  if (chantierId) {
+    const chantiers = await chantiersAutorisesPour(utilisateur.sub, utilisateur.role, filiales);
+    if (chantiers === null || chantiers.includes(chantierId)) return;
+  }
+
+  throw new ErreurApplicative(403, "Cet employé n'appartient pas à votre périmètre");
 }
 
 export async function obtenir(req: Request, res: Response) {
@@ -61,12 +79,21 @@ export async function obtenir(req: Request, res: Response) {
     throw new ErreurApplicative(404, 'Employé introuvable');
   }
 
-  const filiales = filialesAutoriseesPour(req.utilisateur!);
-  if (filiales !== null && !filiales.includes(employe.filialeId)) {
-    throw new ErreurApplicative(403, "Cet employé n'appartient pas à votre périmètre");
-  }
+  await verifierAccesEmploye(req, employe.filialeId, employe.chantierId);
 
   res.json(employe);
+}
+
+export async function resumeRh(req: Request, res: Response) {
+  const employe = await obtenirEmploye(req.params.id);
+
+  if (!employe) {
+    throw new ErreurApplicative(404, 'Employé introuvable');
+  }
+
+  await verifierAccesEmploye(req, employe.filialeId, employe.chantierId);
+
+  res.json(await obtenirResumeRhEmploye(req.params.id));
 }
 
 export async function creer(req: Request, res: Response) {

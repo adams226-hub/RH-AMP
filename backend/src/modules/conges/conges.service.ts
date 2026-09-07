@@ -93,8 +93,11 @@ export async function listerDemandesEmploye(employeId: string): Promise<DemandeC
 
 // Vue globale (tous employés du périmètre) — alimente l'écran Congés et la file
 // d'approbation (avis hiérarchique / décision RH). filialesAutorisees = null = aucune restriction.
+// chantiersAutorisees couvre le Responsable RH Chantier, jamais rattaché à une filiale (cf.
+// employes.service.ts / middleware/autorisation.ts pour le même raisonnement).
 export async function listerToutesDemandes(
   filialesAutorisees: string[] | null,
+  chantiersAutorisees: string[] | null = null,
   statut?: string
 ): Promise<DemandeCongeAvecEmploye[]> {
   const conditions: string[] = [];
@@ -102,7 +105,10 @@ export async function listerToutesDemandes(
 
   if (filialesAutorisees !== null) {
     valeurs.push(filialesAutorisees);
-    conditions.push(`e.filiale_id = ANY($${valeurs.length})`);
+    const iFiliales = valeurs.length;
+    valeurs.push(chantiersAutorisees ?? []);
+    const iChantiers = valeurs.length;
+    conditions.push(`(e.filiale_id = ANY($${iFiliales}) OR e.chantier_id = ANY($${iChantiers}))`);
   }
 
   if (statut) {

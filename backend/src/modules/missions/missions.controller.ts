@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
-import { filialesAutoriseesPour } from '../../middleware/autorisation';
+import { chantiersAutorisesPour, filialesAutoriseesPour } from '../../middleware/autorisation';
 import { creerMission, enregistrerRetour, listerMissions } from './missions.service';
 
 const schemaCreationMission = z.object({
@@ -16,8 +16,10 @@ const schemaRetour = z.object({
 });
 
 export async function lister(req: Request, res: Response) {
-  const filiales = filialesAutoriseesPour(req.utilisateur!);
-  res.json(await listerMissions(filiales));
+  const utilisateur = req.utilisateur!;
+  const filiales = filialesAutoriseesPour(utilisateur);
+  const chantiers = await chantiersAutorisesPour(utilisateur.sub, utilisateur.role, filiales);
+  res.json(await listerMissions(filiales, chantiers));
 }
 
 export async function creer(req: Request, res: Response) {

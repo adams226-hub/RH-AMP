@@ -1,14 +1,14 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import { ErreurApplicative } from '../../middleware/gestionErreurs';
-import { filialesAutoriseesPour } from '../../middleware/autorisation';
+import { chantiersAutorisesPour, filialesAutoriseesPour } from '../../middleware/autorisation';
 import {
   archiverChantier,
-  chantiersAutorisesPour,
   creerChantier,
   detecterAnomalies,
   enregistrerFiche,
   listerChantiers,
+  listerEmployesChantier,
   listerFiches,
   listerFicheMensuelle,
   listerJours,
@@ -19,6 +19,7 @@ import {
   valider,
 } from './pointage.service';
 import { genererFichePointagePdf } from './pointage.pdf';
+import { genererExportExcelPointage } from './pointage.excel';
 
 const schemaCreationChantier = z.object({
   filialeId: z.string().uuid(),
@@ -91,11 +92,46 @@ export async function chantiersArchiver(req: Request, res: Response) {
   res.json(await archiverChantier(req.params.id, actif));
 }
 
+// chantierId (filtre écran) restreint parmi les chantiers déjà autorisés — ne peut jamais élargir
+// le périmètre au-delà de chantiersDuRequerant.
+function appliquerFiltreChantier(chantiersAutorises: string[] | null, chantierId?: string): string[] | null {
+  if (!chantierId) return chantiersAutorises;
+  return chantiersAutorises === null || chantiersAutorises.includes(chantierId) ? [chantierId] : [];
+}
+
 export async function fichesListe(req: Request, res: Response) {
-  const chantiers = await chantiersDuRequerant(req);
+  const chantiers = appliquerFiltreChantier(await chantiersDuRequerant(req), req.query.chantierId as string | undefined);
   const statut = req.query.statut as string | undefined;
   const moisPaie = req.query.moisPaie as string | undefined;
   res.json(await listerFiches(chantiers, statut, moisPaie));
+}
+
+export async function fichesExportExcel(req: Request, res: Response) {
+  const moisPaie = req.query.moisPaie as string | undefined;
+  if (!moisPaie) {
+    throw new ErreurApplicative(400, 'Le paramètre moisPaie est requis');
+  }
+
+  const chantiersAutorises = await chantiersDuRequerant(req);
+  const buffer = await genererExportExcelPointage({
+    chantiersAutorises,
+    chantierId: req.query.chantierId as string | undefined,
+    statut: req.query.statut as string | undefined,
+    moisPaie,
+  });
+
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="pointage-${moisPaie.slice(0, 7)}.xlsx"`);
+  res.send(Buffer.from(buffer));
+}
+
+export async function chantierEmployes(req: Request, res: Response) {
+  const moisPaie = req.query.moisPaie as string | undefined;
+  if (!moisPaie) {
+    throw new ErreurApplicative(400, 'Le paramètre moisPaie est requis');
+  }
+  await verifierAccesChantier(req, req.params.id);
+  res.json(await listerEmployesChantier(req.params.id, moisPaie));
 }
 
 export async function ficheEmploye(req: Request, res: Response) {

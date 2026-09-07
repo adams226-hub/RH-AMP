@@ -1,6 +1,6 @@
 import { pool } from '../../config/db';
 import { ErreurApplicative } from '../../middleware/gestionErreurs';
-import { CreationEmploye, Employe, StatutEmploye } from './employes.types';
+import { CreationEmploye, Employe, ResumeRhEmploye, StatutEmploye } from './employes.types';
 
 function mapLigne(ligne: Record<string, unknown>): Employe {
   return {
@@ -32,12 +32,16 @@ function mapLigne(ligne: Record<string, unknown>): Employe {
 }
 
 // filialesAutorisees = null signifie aucune restriction (rôles super_admin, drh_holding).
+// chantiersAutorisees couvre le Responsable RH Chantier, jamais rattaché à une filiale (toujours
+// [] côté filialesAutoriseesPour) — sans ce second filtre en OR, ce rôle ne voit jamais aucun
+// employé alors qu'il devrait voir ceux de son/ses chantier(s), cf. middleware/autorisation.ts.
 // recherche/limite optionnels : absents pour l'écran Employés (liste complète, filtrage et
 // pagination déjà côté client) ; utilisés par le sélecteur à saisie progressive (des milliers
 // d'employés rendent une liste déroulante complète impraticable — cf. retour utilisateur) pour
 // ne renvoyer qu'un lot de correspondances plutôt que tout charger.
 export async function listerEmployes(
   filialesAutorisees: string[] | null,
+  chantiersAutorisees: string[] | null = null,
   recherche?: string,
   limite?: number
 ): Promise<Employe[]> {
@@ -46,7 +50,10 @@ export async function listerEmployes(
 
   if (filialesAutorisees !== null) {
     valeurs.push(filialesAutorisees);
-    conditions.push(`filiale_id = ANY($${valeurs.length})`);
+    const iFiliales = valeurs.length;
+    valeurs.push(chantiersAutorisees ?? []);
+    const iChantiers = valeurs.length;
+    conditions.push(`(filiale_id = ANY($${iFiliales}) OR chantier_id = ANY($${iChantiers}))`);
   }
 
   if (recherche) {
@@ -73,6 +80,42 @@ export async function listerEmployes(
 export async function obtenirEmploye(id: string): Promise<Employe | null> {
   const { rows } = await pool.query('SELECT * FROM employes WHERE id = $1', [id]);
   return rows[0] ? mapLigne(rows[0]) : null;
+}
+
+// Résumé RH affiché sur la fiche employé — année en cours uniquement, absences validées par la
+// RH seulement (cf. commentaire sur ResumeRhEmploye). « En mission » = une mission dont la date
+// de retour réelle n'est pas encore renseignée et dont le départ est déjà passé (même logique
+// que missions.service.ts, qui ne stocke jamais de statut et le déduit toujours des 3 dates).
+export async function obtenirResumeRhEmploye(id: string): Promise<ResumeRhEmploye> {
+  const annee = new Date().getFullYear();
+
+  const { rows: soldeRows } = await pool.query(
+    'SELECT jours_consommes, solde_disponible FROM soldes_conges WHERE employe_id = $1 AND annee = $2',
+    [id, annee]
+  );
+
+  const { rows: absenceRows } = await pool.query(
+    `SELECT COALESCE(SUM(nb_jours), 0) AS total FROM demandes_absences
+     WHERE employe_id = $1 AND decision_rh = 'validee' AND EXTRACT(YEAR FROM date_debut) = $2`,
+    [id, annee]
+  );
+
+  const { rows: missionRows } = await pool.query(
+    `SELECT destination, date_retour_prevue FROM missions
+     WHERE employe_id = $1 AND date_retour_reelle IS NULL AND date_depart <= CURRENT_DATE
+     ORDER BY date_depart DESC LIMIT 1`,
+    [id]
+  );
+
+  return {
+    annee,
+    joursAbsenceValides: Number(absenceRows[0]?.total ?? 0),
+    congesPris: Number(soldeRows[0]?.jours_consommes ?? 0),
+    soldeConges: Number(soldeRows[0]?.solde_disponible ?? 0),
+    enMission: missionRows.length > 0,
+    missionDestination: (missionRows[0]?.destination as string | undefined) ?? null,
+    missionDateRetourPrevue: (missionRows[0]?.date_retour_prevue as string | undefined) ?? null,
+  };
 }
 
 async function verifierCategorieProfessionnelle(code: string): Promise<void> {

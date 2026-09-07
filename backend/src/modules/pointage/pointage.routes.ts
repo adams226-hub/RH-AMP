@@ -3,10 +3,12 @@ import { asyncHandler } from '../../utils/asyncHandler';
 import { authentification } from '../../middleware/authentification';
 import { autoriserRoles } from '../../middleware/autorisation';
 import {
+  chantierEmployes,
   chantiersArchiver,
   chantiersCreer,
   chantiersListe,
   chantiersRenommer,
+  fichesExportExcel,
   fichesListe,
   ficheAnomalies,
   ficheEmploye,
@@ -30,8 +32,10 @@ routesPointage.get('/chantiers', asyncHandler(chantiersListe));
 routesPointage.post('/chantiers', gestionnairesStructure, asyncHandler(chantiersCreer));
 routesPointage.patch('/chantiers/:id', gestionnairesStructure, asyncHandler(chantiersRenommer));
 routesPointage.post('/chantiers/:id/statut', admin, asyncHandler(chantiersArchiver));
+routesPointage.get('/chantiers/:id/employes', saisieChantier, asyncHandler(chantierEmployes));
 
 routesPointage.get('/fiches', saisieChantier, asyncHandler(fichesListe));
+routesPointage.get('/fiches/export-excel', saisieChantier, asyncHandler(fichesExportExcel));
 routesPointage.get('/fiches/employe', asyncHandler(ficheEmploye));
 routesPointage.post('/fiches', saisieChantier, asyncHandler(ficheEnregistrer));
 routesPointage.post('/fiches/:id/soumettre', saisieChantier, asyncHandler(ficheSoumettre));

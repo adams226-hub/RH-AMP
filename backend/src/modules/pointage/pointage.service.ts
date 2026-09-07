@@ -2,13 +2,13 @@ import { PoolClient } from 'pg';
 import { pool } from '../../config/db';
 import { ErreurApplicative } from '../../middleware/gestionErreurs';
 import { verifierCycleOuvertPourEmploye } from '../cyclesPaie/verrouCycle';
-import { CodeRole } from '../auth/auth.types';
 import { calculerPointageDepuisJours } from './pointage.calcul';
 import {
   AnomalieAbsence,
   Chantier,
   CodeAbsencePointage,
   CreationChantier,
+  EmployeAvecPointage,
   JourPointage,
   PointageMensuel,
   PointageMensuelAvecDetails,
@@ -65,35 +65,6 @@ export async function archiverChantier(id: string, actif: boolean): Promise<Chan
   return mapChantier(rows[0]);
 }
 
-// Périmètre chantier d'un utilisateur : null = aucune restriction (super_admin, drh_holding).
-// rh_filiale est scopé via ses filiales (tous les chantiers de ses filiales). responsable_rh_chantier
-// est scopé plus finement via utilisateurs_chantiers (absent du JWT, lu à chaque appel pour éviter
-// qu'un changement d'affectation nécessite une reconnexion) — cf. SPEC_MODULE_POINTAGE_AMP.md §2,
-// jusqu'ici jamais appliqué (n'importe quel responsable_rh_chantier pouvait saisir sur n'importe
-// quel chantier).
-export async function chantiersAutorisesPour(
-  utilisateurId: string,
-  role: CodeRole,
-  filialesAutorisees: string[] | null
-): Promise<string[] | null> {
-  if (role === 'super_admin' || role === 'drh_holding') return null;
-
-  if (role === 'rh_filiale') {
-    if (filialesAutorisees === null) return null;
-    const { rows } = await pool.query('SELECT id FROM chantiers WHERE filiale_id = ANY($1)', [filialesAutorisees]);
-    return rows.map((r) => r.id as string);
-  }
-
-  if (role === 'responsable_rh_chantier') {
-    const { rows } = await pool.query('SELECT chantier_id FROM utilisateurs_chantiers WHERE utilisateur_id = $1', [
-      utilisateurId,
-    ]);
-    return rows.map((r) => r.chantier_id as string);
-  }
-
-  return [];
-}
-
 function mapPointageMensuel(l: Record<string, unknown>): PointageMensuel {
   return {
     id: l.id as string,
@@ -144,6 +115,30 @@ export async function listerJours(pointageMensuelId: string): Promise<JourPointa
     date: l.date as string,
     heures: l.heures !== null ? Number(l.heures) : null,
     codeAbsence: l.code_absence as CodeAbsencePointage | null,
+  }));
+}
+
+// Effectif d'un chantier pour un mois donné (employes.chantier_id = lieu d'affectation par
+// défaut) avec, pour chacun, la fiche du mois si elle existe déjà — alimente l'écran de saisie
+// « chantier d'abord » (cf. EmployeAvecPointage). Ne filtre pas sur soumis_pointage : ce champ
+// pilote le blocage de paie, pas qui peut être pointé sur ce chantier.
+export async function listerEmployesChantier(chantierId: string, moisPaie: string): Promise<EmployeAvecPointage[]> {
+  const { rows } = await pool.query(
+    `SELECT e.id AS employe_id, e.matricule, e.nom, e.prenoms, p.id AS fiche_id, p.statut
+     FROM employes e
+     LEFT JOIN pointages_mensuels p ON p.employe_id = e.id AND p.mois_paie = date_trunc('month', $2::date)
+     WHERE e.chantier_id = $1 AND e.statut = 'actif'
+     ORDER BY e.nom, e.prenoms`,
+    [chantierId, moisPaie]
+  );
+
+  return rows.map((l) => ({
+    employeId: l.employe_id as string,
+    matricule: l.matricule as string,
+    nom: l.nom as string,
+    prenoms: l.prenoms as string,
+    ficheId: l.fiche_id as string | null,
+    statut: l.statut as EmployeAvecPointage['statut'],
   }));
 }
 

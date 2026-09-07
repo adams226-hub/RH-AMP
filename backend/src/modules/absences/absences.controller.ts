@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import { ErreurApplicative } from '../../middleware/gestionErreurs';
-import { filialesAutoriseesPour } from '../../middleware/autorisation';
+import { chantiersAutorisesPour, filialesAutoriseesPour } from '../../middleware/autorisation';
 import {
   BAREME_PERMISSIONS_EXCEPTIONNELLES,
   creerDemande,
@@ -58,8 +58,10 @@ export async function demandesListe(req: Request, res: Response) {
     return;
   }
 
-  const filiales = filialesAutoriseesPour(req.utilisateur!);
-  res.json(await listerToutesDemandes(filiales, req.query.statut as string | undefined));
+  const utilisateur = req.utilisateur!;
+  const filiales = filialesAutoriseesPour(utilisateur);
+  const chantiers = await chantiersAutorisesPour(utilisateur.sub, utilisateur.role, filiales);
+  res.json(await listerToutesDemandes(filiales, chantiers, req.query.statut as string | undefined));
 }
 
 export async function demandesCreer(req: Request, res: Response) {
@@ -86,7 +88,11 @@ export async function demandeFiche(req: Request, res: Response) {
   const utilisateur = req.utilisateur!;
   const estProprietaire = utilisateur.employeId === acces.employeId;
   const filiales = filialesAutoriseesPour(utilisateur);
-  const dansPerimetre = filiales === null || filiales.includes(acces.filialeId);
+  let dansPerimetre = filiales === null || filiales.includes(acces.filialeId);
+  if (!dansPerimetre && acces.chantierId) {
+    const chantiers = await chantiersAutorisesPour(utilisateur.sub, utilisateur.role, filiales);
+    dansPerimetre = chantiers === null || chantiers.includes(acces.chantierId);
+  }
 
   if (!estProprietaire && !dansPerimetre) {
     throw new ErreurApplicative(403, "Accès refusé à cette demande");

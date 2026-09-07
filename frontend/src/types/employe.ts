@@ -29,3 +29,15 @@ export interface Employe {
   // pointage du mois n'est pas validé.
   soumisPointage: boolean;
 }
+
+// Résumé RH affiché sur la fiche employé — année en cours, absences validées par la RH
+// uniquement (cf. backend/src/modules/employes/employes.types.ts).
+export interface ResumeRhEmploye {
+  annee: number;
+  joursAbsenceValides: number;
+  congesPris: number;
+  soldeConges: number;
+  enMission: boolean;
+  missionDestination: string | null;
+  missionDateRetourPrevue: string | null;
+}

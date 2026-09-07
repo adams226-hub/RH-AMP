@@ -19,9 +19,16 @@ import {
 import { Mission, MissionAvecEmploye } from '../types/missions';
 import { ElementVariable, TypeElementSaisissable } from '../types/elementsVariables';
 import { Contrat, ContratAvecEmploye } from '../types/contrats';
-import { Employe } from '../types/employe';
+import { Employe, ResumeRhEmploye } from '../types/employe';
 import { BulletinPaie, ResultatCalculMasse, ResultatSimulationNetVersBrut } from '../types/paie';
-import { AnomalieAbsence, Chantier, CodeAbsencePointage, PointageMensuel, PointageMensuelAvecDetails } from '../types/pointage';
+import {
+  AnomalieAbsence,
+  Chantier,
+  CodeAbsencePointage,
+  EmployeAvecPointage,
+  PointageMensuel,
+  PointageMensuelAvecDetails,
+} from '../types/pointage';
 import { Departement, Filiale, Fonction, ServiceOrg } from '../types/postes';
 import { CreationUtilisateur, Utilisateur } from '../types/utilisateurs';
 import { ParametrePaie } from '../types/parametresPaie';
@@ -110,6 +117,8 @@ export const api = {
   rechercherEmployes: (jeton: string, recherche: string, limite = 20) =>
     requete<Employe[]>(`/api/employes?recherche=${encodeURIComponent(recherche)}&limite=${limite}`, {}, jeton),
   obtenirEmploye: (jeton: string, id: string) => requete<Employe>(`/api/employes/${id}`, {}, jeton),
+  obtenirResumeRhEmploye: (jeton: string, id: string) =>
+    requete<ResumeRhEmploye>(`/api/employes/${id}/resume-rh`, {}, jeton),
   creerEmploye: (
     jeton: string,
     donnees: {
@@ -282,11 +291,20 @@ export const api = {
     requete<Chantier>(`/api/pointage/chantiers/${id}`, { method: 'PATCH', body: JSON.stringify({ nom }) }, jeton),
   archiverChantier: (jeton: string, id: string, actif: boolean) =>
     requete<Chantier>(`/api/pointage/chantiers/${id}/statut`, { method: 'POST', body: JSON.stringify({ actif }) }, jeton),
-  listerFichesPointage: (jeton: string, statut?: string, moisPaie?: string) => {
+  listerEmployesChantier: (jeton: string, chantierId: string, moisPaie: string) =>
+    requete<EmployeAvecPointage[]>(`/api/pointage/chantiers/${chantierId}/employes?moisPaie=${moisPaie}`, {}, jeton),
+  listerFichesPointage: (jeton: string, statut?: string, moisPaie?: string, chantierId?: string) => {
     const params = new URLSearchParams();
     if (statut) params.set('statut', statut);
     if (moisPaie) params.set('moisPaie', moisPaie);
+    if (chantierId) params.set('chantierId', chantierId);
     return requete<PointageMensuelAvecDetails[]>(`/api/pointage/fiches?${params}`, {}, jeton);
+  },
+  exporterPointageExcel: (jeton: string, moisPaie: string, statut?: string, chantierId?: string) => {
+    const params = new URLSearchParams({ moisPaie });
+    if (statut) params.set('statut', statut);
+    if (chantierId) params.set('chantierId', chantierId);
+    return requeteBlob(`/api/pointage/fiches/export-excel?${params}`, jeton);
   },
   obtenirFichePointageEmploye: (jeton: string, employeId: string, moisPaie: string) =>
     requete<(PointageMensuel & { jours: { date: string; heures: number | null; codeAbsence: CodeAbsencePointage | null }[] }) | null>(

@@ -8,12 +8,12 @@ const OPTIONS_SEXE = [
   { valeur: 'M', libelle: 'Homme' },
 ];
 
-// "CDC" volontairement absent des options — non résolu comme vraie catégorie vs erreur de
-// saisie récurrente (cf. points signalés). N'apparaît que si présent tel quel en base côté
-// répartition, jamais proposé comme filtre tant que ce n'est pas tranché.
+// CDC confirmé comme vrai type de contrat (Contrat à Durée de Chantier), plus une erreur de
+// saisie — ajouté aux options du filtre.
 const OPTIONS_TYPE_CONTRAT = [
   { valeur: 'cdi', libelle: 'CDI' },
   { valeur: 'cdd', libelle: 'CDD' },
+  { valeur: 'cdc', libelle: 'CDC' },
   { valeur: 'stage', libelle: 'Stage' },
 ];
 

@@ -50,6 +50,17 @@ export interface PointageMensuelAvecDetails extends PointageMensuel {
   filialeId: string;
 }
 
+// Effectif d'un chantier pour un mois donné — alimente l'écran de saisie « chantier d'abord »
+// (Pointage.tsx) : on voit qui a déjà une fiche, plutôt que de rechercher chaque employé.
+export interface EmployeAvecPointage {
+  employeId: string;
+  matricule: string;
+  nom: string;
+  prenoms: string;
+  ficheId: string | null;
+  statut: StatutPointageMensuel | null;
+}
+
 export interface AnomalieAbsence {
   date: string;
   code: CodeAbsencePointage;
