@@ -6,7 +6,7 @@ async function demarrer() {
   await pool.query('SELECT 1'); // vérifie la connexion DB avant d'accepter du trafic
 
   app.listen(env.PORT, () => {
-    console.log(`Backend SIRH AMP Holding démarré sur le port ${env.PORT}`);
+    console.log(`Backend RH AMP Holding démarré sur le port ${env.PORT}`);
   });
 }
 

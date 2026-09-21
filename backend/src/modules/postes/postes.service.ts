@@ -17,6 +17,7 @@ function mapFiliale(l: Record<string, unknown>): Filiale {
   return {
     id: l.id as string,
     nom: l.nom as string,
+    raisonSociale: l.raison_sociale as string | null,
     ville: l.ville as string | null,
     pays: l.pays as string,
     adresse: l.adresse as string | null,
@@ -79,13 +80,14 @@ export async function archiverFiliale(id: string, actif: boolean): Promise<Filia
 
 // Coordonnées légales affichées en pied de bulletin (adresse, RCCM, IFU, téléphone, site web) —
 // une valeur par filiale, entités juridiques distinctes (cf. décision produit). Toujours une
-// mise à jour complète des 5 champs (formulaire dédié, pas un patch partiel).
+// mise à jour complète des champs (formulaire dédié, pas un patch partiel).
 export async function modifierCoordonneesFiliale(id: string, donnees: CoordonneesLegalesFiliale): Promise<Filiale> {
   const { rows } = await pool.query(
-    `UPDATE filiales SET adresse = $2, rccm = $3, ifu = $4, telephone = $5, site_web = $6, couleur_accent = $7
+    `UPDATE filiales SET raison_sociale = $2, adresse = $3, rccm = $4, ifu = $5, telephone = $6, site_web = $7, couleur_accent = $8
      WHERE id = $1 RETURNING *`,
     [
       id,
+      donnees.raisonSociale ?? null,
       donnees.adresse ?? null,
       donnees.rccm ?? null,
       donnees.ifu ?? null,

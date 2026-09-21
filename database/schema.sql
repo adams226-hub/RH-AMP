@@ -1,5 +1,5 @@
 -- ============================================================================
--- SIRH AMP Holding — Schéma PostgreSQL (Supabase)
+-- RH AMP Holding — Schéma PostgreSQL (Supabase)
 -- Périmètre : modules Employés, Contrats, Congés, Pointage, Paie, Postes,
 --             Tableaux de bord (vues, non tables), Utilisateurs, Archivage.
 -- Hors périmètre (non modélisé ici) : Évaluation du personnel, Santé et sécurité.
@@ -21,6 +21,11 @@ CREATE TYPE type_contrat AS ENUM ('cdi', 'cdd', 'stage', 'cdc'); -- cdc = Contra
 CREATE TYPE statut_contrat AS ENUM ('brouillon', 'signe', 'actif', 'renouvele', 'expire', 'rompu', 'termine');
 
 CREATE TYPE statut_demande_conge AS ENUM ('brouillon', 'soumise', 'avis_favorable', 'avis_defavorable', 'validee_rh', 'rejetee_rh', 'annulee');
+
+-- Congé maternité/paternité : ne consomme jamais le solde de congé annuel (soldes_conges),
+-- pas d'étape d'avis hiérarchique (contrairement au congé administratif) — décision RH directe.
+CREATE TYPE type_conge_special AS ENUM ('maternite', 'paternite');
+CREATE TYPE statut_conge_special AS ENUM ('soumise', 'validee', 'rejetee');
 
 CREATE TYPE statut_bulletin AS ENUM ('brouillon', 'calcule', 'valide', 'valide_drh', 'cloture');
 
@@ -57,6 +62,9 @@ CREATE TYPE statut_pointage AS ENUM ('saisi', 'valide');
 CREATE TABLE filiales (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     nom         TEXT NOT NULL,
+    raison_sociale TEXT, -- dénomination juridique complète (ex. "African Mining Partenair (AMP) SA")
+                          -- distincte de `nom` (nom court, ex. "AMP") — utilisée dans les attestations
+                          -- (cf. attestations.service.ts) ; NULL = repli sur `nom`
     ville       TEXT,
     pays        TEXT NOT NULL DEFAULT 'Burkina Faso',
     adresse     TEXT,
@@ -64,6 +72,14 @@ CREATE TABLE filiales (
     ifu         TEXT,
     telephone   TEXT,
     site_web    TEXT,
+    secteur_activite TEXT, -- sous-titre affiché sous le nom de la filiale en en-tête du bulletin de
+                            -- paie (paie.pdf.ts) ; NULL = repli sur le texte générique du groupe
+                            -- ("BTP - Génie-Civil - Équipements - Miniers - Import-Export")
+    -- Pied de page légal du bulletin, en texte libre multi-lignes (une ligne par \n) — utilisé tel
+    -- quel à la place de la ligne auto-composée à partir de adresse/rccm/ifu/telephone quand une
+    -- filiale a des mentions légales plus riches que ce gabarit ne peut exprimer (capital social,
+    -- section cadastrale, régime d'imposition...). NULL = repli sur le gabarit simple.
+    mentions_legales_bulletin TEXT,
     logo_url    TEXT, -- chemin dans le bucket Supabase Storage "logos" (pas d'URL publique — logo
                        -- récupéré côté serveur pour être incorporé dans le PDF du bulletin)
     couleur_accent  TEXT, -- hex ('#RRGGBB'), couleur dominante du logo — bandeau/pied de page des
@@ -231,6 +247,7 @@ CREATE TABLE employes (
     sexe                  TEXT NOT NULL CHECK (sexe IN ('M', 'F')),
     nationalite           TEXT NOT NULL,
     situation_matrimoniale TEXT,
+    groupe_sanguin        TEXT,
     nb_enfants            INTEGER NOT NULL DEFAULT 0,
     adresse               TEXT,
     telephone             TEXT NOT NULL,
@@ -238,6 +255,8 @@ CREATE TABLE employes (
     contact_urgence_nom   TEXT,
     contact_urgence_lien  TEXT,
     contact_urgence_tel   TEXT,
+    contact_urgence_tel2  TEXT, -- second numéro de la personne à prévenir en cas de besoin
+    maladie_particuliere  TEXT, -- ex. hypertension, diabète — information médicale sensible, cf. confidentialite_document pour les documents associés
     num_cnib              TEXT NOT NULL,
     num_cnss              TEXT NOT NULL,
     rib                   TEXT, -- sert aussi de "N° de compte" sur le bulletin de paie
@@ -353,7 +372,7 @@ CREATE TABLE demandes_conges (
     employe_id              UUID NOT NULL REFERENCES employes(id) ON DELETE CASCADE,
     date_debut              DATE NOT NULL,
     date_fin                DATE NOT NULL,
-    nb_jours                NUMERIC(5,2) NOT NULL, -- calculé côté application (jours ouvrés, hors jours_feries)
+    nb_jours                NUMERIC(5,2) NOT NULL, -- calculé côté application (jours ouvrables : semaine de 6 jours, hors dimanche et jours_feries)
     motif                   TEXT,
     statut                  statut_demande_conge NOT NULL DEFAULT 'brouillon',
     avis_hierarchique       TEXT CHECK (avis_hierarchique IN ('favorable', 'defavorable')),
@@ -366,6 +385,30 @@ CREATE TABLE demandes_conges (
 
     CHECK (date_fin >= date_debut)
 );
+
+-- Durées par défaut proposées à la création (RH ajustable à la validation) : 105 jours calendaires
+-- pour la maternité (~3 mois 3 semaines), 3 jours calendaires pour la paternité. Jamais de déduction
+-- sur soldes_conges (congé légal distinct du congé administratif de 30 j/an).
+CREATE TABLE demandes_conges_speciaux (
+    id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    employe_id           UUID NOT NULL REFERENCES employes(id) ON DELETE CASCADE,
+    type                 type_conge_special NOT NULL,
+    date_debut           DATE NOT NULL,
+    date_fin             DATE NOT NULL,
+    justificatif_fourni  BOOLEAN NOT NULL DEFAULT false,
+    motif                TEXT,
+    statut               statut_conge_special NOT NULL DEFAULT 'soumise',
+    commentaire_rh       TEXT,
+    valide_par           UUID REFERENCES utilisateurs(id) ON DELETE SET NULL,
+    valide_le            TIMESTAMPTZ,
+
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    CHECK (date_fin >= date_debut)
+);
+
+CREATE INDEX idx_conges_speciaux_employe ON demandes_conges_speciaux(employe_id);
 
 CREATE INDEX idx_demandes_conges_employe ON demandes_conges(employe_id);
 CREATE INDEX idx_demandes_conges_statut ON demandes_conges(statut);
@@ -435,11 +478,14 @@ CREATE INDEX idx_demandes_absences_statut ON demandes_absences(statut);
 CREATE TABLE missions (
     id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     employe_id            UUID NOT NULL REFERENCES employes(id) ON DELETE CASCADE,
+    numero_ordre_mission  TEXT NOT NULL,
     destination           TEXT NOT NULL,
     motif                 TEXT NOT NULL,
     date_depart           DATE NOT NULL,
     date_retour_prevue    DATE NOT NULL,
     date_retour_reelle    DATE,
+    montant_hebergement   NUMERIC(12,2) NOT NULL DEFAULT 0,
+    montant_restauration  NUMERIC(12,2) NOT NULL DEFAULT 0,
 
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),

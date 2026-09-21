@@ -8,6 +8,7 @@ import {
   changerStatut,
   creer,
   lister,
+  modifier,
   obtenir,
   resumeRh,
 } from './employes.controller';
@@ -22,6 +23,7 @@ routesEmployes.get('/', asyncHandler(lister));
 routesEmployes.get('/:id', asyncHandler(obtenir));
 routesEmployes.get('/:id/resume-rh', asyncHandler(resumeRh));
 routesEmployes.post('/', gestionnairesEmployes, asyncHandler(creer));
+routesEmployes.patch('/:id', gestionnairesEmployes, asyncHandler(modifier));
 routesEmployes.post('/:id/statut', gestionnairesEmployes, asyncHandler(changerStatut));
 routesEmployes.post('/:id/chantier', gestionnairesEmployes, asyncHandler(affecterChantier));
 routesEmployes.post('/:id/pointage', gestionnairesEmployes, asyncHandler(changerSoumisPointage));

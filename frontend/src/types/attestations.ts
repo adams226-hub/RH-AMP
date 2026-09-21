@@ -26,27 +26,28 @@ export interface DonneesAttestationTravail extends ChampsCommuns {
   sexe: 'M' | 'F';
   dateNaissance: string | null;
   lieuNaissance: string | null;
-  numeroPiece: string;
+  matricule: string;
   dateEmbauche: string;
   poste: string;
-  typeContrat: string;
-  filiale: string;
-  lieuAffectation: string;
 }
 
 export interface DonneesCertificatTravail extends ChampsCommuns {
   nomPrenomsEmploye: string;
   sexe: 'M' | 'F';
+  dateNaissance: string | null;
+  lieuNaissance: string | null;
+  matricule: string;
   dateEmbauche: string;
   dateSortie: string;
   dureeService: string;
   postesOccupes: PosteOccupe[];
-  motifDepart: string;
 }
 
 export interface DonneesAttestationStage extends ChampsCommuns {
   nomPrenomsStagiaire: string;
   sexe: 'M' | 'F';
+  dateNaissance: string | null;
+  lieuNaissance: string | null;
   filiereEtudes: string;
   etablissement: string;
   dateDebutStage: string;

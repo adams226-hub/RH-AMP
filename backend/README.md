@@ -1,4 +1,4 @@
-# Backend SIRH AMP Holding
+# Backend RH AMP Holding
 
 API Node.js + Express + TypeScript, connectée à PostgreSQL (Supabase), authentification JWT + RBAC.
 

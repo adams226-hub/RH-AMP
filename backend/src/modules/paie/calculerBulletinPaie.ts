@@ -562,12 +562,14 @@ export function calculerBrutDepuisNet(
     const employeEssai: Employe = { ...employe, [champVariable]: valeur };
     bulletin = calculerBulletinPaie(employeEssai, elementsVariables);
 
-    const ecart = bulletin.netAPayer - netCible;
+    // Cible = salaire net (avant la retenue FSP de 1%), pas le net à payer final — c'est ce que
+    // désigne "un net de X" côté RH/recrutement (net à payer n'est qu'une étape ultérieure).
+    const ecart = bulletin.salaireNet - netCible;
     if (Math.abs(ecart) <= tolerance) {
       return { bulletin, champVariable, valeurTrouvee: valeur, ecartFinal: ecart, convergence: true };
     }
 
-    if (bulletin.netAPayer < netCible) {
+    if (bulletin.salaireNet < netCible) {
       borneBasse = valeur;
     } else {
       borneHaute = valeur;
@@ -576,5 +578,5 @@ export function calculerBrutDepuisNet(
 
   // 50 itérations non atteintes à la tolérance exacte (cf. addendum §2) — on retourne
   // le meilleur résultat trouvé plutôt que d'échouer silencieusement.
-  return { bulletin: bulletin!, champVariable, valeurTrouvee: valeur, ecartFinal: bulletin!.netAPayer - netCible, convergence: false };
+  return { bulletin: bulletin!, champVariable, valeurTrouvee: valeur, ecartFinal: bulletin!.salaireNet - netCible, convergence: false };
 }

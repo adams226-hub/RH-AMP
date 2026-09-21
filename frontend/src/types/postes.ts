@@ -1,6 +1,9 @@
 export interface Filiale {
   id: string;
   nom: string;
+  // Dénomination juridique complète (ex. "African Mining Partenair (AMP) SA"), distincte du nom
+  // court `nom` (ex. "AMP") — utilisée dans les attestations générées.
+  raisonSociale: string | null;
   ville: string | null;
   pays: string;
   adresse: string | null;

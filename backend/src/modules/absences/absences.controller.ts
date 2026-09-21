@@ -8,21 +8,25 @@ import {
   donnerAvisHierarchique,
   listerDemandesEmploye,
   listerToutesDemandes,
+  modifierDemande,
   obtenirDemandePourAcces,
   obtenirSoldePermission,
   traiterDecisionRh,
 } from './absences.service';
 import { genererFichePdf } from './absences.pdf';
+import { genererExportExcelAbsences } from './absences.excel';
 
 const schemaCreationDemande = z.object({
   employeId: z.string().uuid(),
   type: z.enum(['permission_exceptionnelle', 'absence_hors_bareme']),
   motifBareme: z.string().optional(),
-  motif: z.string().min(1),
+  motif: z.string().optional(),
   dateDebut: z.string(),
   dateFin: z.string(),
   justificatifFourni: z.boolean().optional(),
 });
+
+const schemaModificationDemande = schemaCreationDemande.omit({ employeId: true }).partial();
 
 const schemaAvis = z.object({
   avis: z.enum(['favorable', 'defavorable']),
@@ -64,23 +68,22 @@ export async function demandesListe(req: Request, res: Response) {
   res.json(await listerToutesDemandes(filiales, chantiers, req.query.statut as string | undefined));
 }
 
-export async function demandesCreer(req: Request, res: Response) {
-  const donnees = schemaCreationDemande.parse(req.body);
-  res.status(201).json(await creerDemande(donnees));
+export async function exportExcel(req: Request, res: Response) {
+  const utilisateur = req.utilisateur!;
+  const filiales = filialesAutoriseesPour(utilisateur);
+  const chantiers = await chantiersAutorisesPour(utilisateur.sub, utilisateur.role, filiales);
+
+  const buffer = await genererExportExcelAbsences(filiales, chantiers);
+
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', 'attachment; filename="absences.xlsx"');
+  res.send(Buffer.from(buffer));
 }
 
-export async function demandesAvis(req: Request, res: Response) {
-  const { avis, commentaire } = schemaAvis.parse(req.body);
-  res.json(await donnerAvisHierarchique(req.params.id, avis, commentaire));
-}
-
-export async function demandesDecision(req: Request, res: Response) {
-  const { decision, classification, commentaire } = schemaDecision.parse(req.body);
-  res.json(await traiterDecisionRh(req.params.id, decision, classification, commentaire));
-}
-
-export async function demandeFiche(req: Request, res: Response) {
-  const acces = await obtenirDemandePourAcces(req.params.id);
+// Partagé fiche PDF / modification : propriétaire de la demande, ou dans le périmètre
+// filiale/chantier de qui la traite (même raisonnement que verifierAccesEmploye).
+async function verifierAccesDemande(req: Request, id: string): Promise<void> {
+  const acces = await obtenirDemandePourAcces(id);
   if (!acces) {
     throw new ErreurApplicative(404, 'Demande introuvable');
   }
@@ -95,8 +98,33 @@ export async function demandeFiche(req: Request, res: Response) {
   }
 
   if (!estProprietaire && !dansPerimetre) {
-    throw new ErreurApplicative(403, "Accès refusé à cette demande");
+    throw new ErreurApplicative(403, 'Accès refusé à cette demande');
   }
+}
+
+export async function demandesCreer(req: Request, res: Response) {
+  const donnees = schemaCreationDemande.parse(req.body);
+  res.status(201).json(await creerDemande(donnees));
+}
+
+export async function demandesModifier(req: Request, res: Response) {
+  await verifierAccesDemande(req, req.params.id);
+  const donnees = schemaModificationDemande.parse(req.body);
+  res.json(await modifierDemande(req.params.id, donnees));
+}
+
+export async function demandesAvis(req: Request, res: Response) {
+  const { avis, commentaire } = schemaAvis.parse(req.body);
+  res.json(await donnerAvisHierarchique(req.params.id, avis, commentaire));
+}
+
+export async function demandesDecision(req: Request, res: Response) {
+  const { decision, classification, commentaire } = schemaDecision.parse(req.body);
+  res.json(await traiterDecisionRh(req.params.id, decision, classification, commentaire));
+}
+
+export async function demandeFiche(req: Request, res: Response) {
+  await verifierAccesDemande(req, req.params.id);
 
   const pdf = await genererFichePdf(req.params.id);
   res.setHeader('Content-Type', 'application/pdf');

@@ -77,7 +77,7 @@ export function Contrats() {
   const [indemniteAstreinte, setIndemniteAstreinte] = useState('0');
 
   const [contratActif, setContratActif] = useState<ContratAvecEmploye | null>(null);
-  const [actionModale, setActionModale] = useState<'renouveler' | 'rompre' | null>(null);
+  const [actionModale, setActionModale] = useState<'renouveler' | 'rompre' | 'modifier' | null>(null);
 
   function rafraichir() {
     if (!jeton) return;
@@ -217,8 +217,8 @@ export function Contrats() {
             <div>
               <label className={LABEL}>Type</label>
               <select value={type} onChange={(e) => setType(e.target.value as TypeContrat)} className={CHAMP}>
-                <option value="cdi">CDI</option>
-                <option value="cdd">CDD</option>
+                <option value="cdi">CDI — Contrat à Durée Indéterminée</option>
+                <option value="cdd">CDD — Contrat à Durée Déterminée</option>
                 <option value="cdc">CDC — Contrat à durée de chantier</option>
                 <option value="stage">Stage</option>
               </select>
@@ -384,13 +384,24 @@ export function Contrats() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       {peutGerer && (c.statut === 'brouillon' || c.statut === 'signe') && (
-                        <button
-                          disabled={activationEnCours === c.id}
-                          onClick={() => activer(c.id)}
-                          className="font-medium text-succes-700 transition-colors duration-200 hover:underline disabled:opacity-50"
-                        >
-                          {activationEnCours === c.id ? 'Activation...' : 'Activer'}
-                        </button>
+                        <div className="flex justify-end gap-3">
+                          <button
+                            onClick={() => {
+                              setContratActif(c);
+                              setActionModale('modifier');
+                            }}
+                            className="font-medium text-primary-700 transition-colors duration-200 hover:underline"
+                          >
+                            Modifier
+                          </button>
+                          <button
+                            disabled={activationEnCours === c.id}
+                            onClick={() => activer(c.id)}
+                            className="font-medium text-succes-700 transition-colors duration-200 hover:underline disabled:opacity-50"
+                          >
+                            {activationEnCours === c.id ? 'Activation...' : 'Activer'}
+                          </button>
+                        </div>
                       )}
                       {peutGerer && c.statut === 'actif' && (
                         <div className="flex justify-end gap-3">
@@ -434,6 +445,17 @@ export function Contrats() {
         )}
       </div>
 
+      {contratActif && actionModale === 'modifier' && (
+        <FormulaireModification
+          contrat={contratActif}
+          onFermer={() => setActionModale(null)}
+          onSucces={() => {
+            setActionModale(null);
+            rafraichir();
+          }}
+        />
+      )}
+
       {contratActif && actionModale === 'renouveler' && (
         <FormulaireRenouvellement
           contrat={contratActif}
@@ -456,6 +478,146 @@ export function Contrats() {
         />
       )}
     </MiseEnPage>
+  );
+}
+
+function FormulaireModification({
+  contrat,
+  onFermer,
+  onSucces,
+}: {
+  contrat: ContratAvecEmploye;
+  onFermer: () => void;
+  onSucces: () => void;
+}) {
+  const { jeton } = useAuth();
+  const [type, setType] = useState<TypeContrat>(contrat.type);
+  const [dateDebut, setDateDebut] = useState(contrat.dateDebut);
+  const [dateFin, setDateFin] = useState(contrat.dateFin ?? '');
+  const [salaireBase, setSalaireBase] = useState(String(contrat.salaireBase));
+  const [sursalaire, setSursalaire] = useState(String(contrat.sursalaire));
+  const [indemniteLogement, setIndemniteLogement] = useState(String(contrat.indemniteLogement));
+  const [indemniteTransport, setIndemniteTransport] = useState(String(contrat.indemniteTransport));
+  const [indemniteFonction, setIndemniteFonction] = useState(String(contrat.indemniteFonction));
+  const [indemniteSujetion, setIndemniteSujetion] = useState(String(contrat.indemniteSujetion));
+  const [indemniteAstreinte, setIndemniteAstreinte] = useState(String(contrat.indemniteAstreinte));
+  const [erreur, setErreur] = useState<string | null>(null);
+  const [enCours, setEnCours] = useState(false);
+
+  async function soumettre(evenement: FormEvent) {
+    evenement.preventDefault();
+    if (!jeton) return;
+    setEnCours(true);
+    try {
+      await api.modifierContrat(jeton, contrat.id, {
+        type,
+        dateDebut,
+        dateFin: type === 'cdi' ? undefined : dateFin || undefined,
+        salaireBase: Number(salaireBase),
+        sursalaire: Number(sursalaire),
+        indemniteLogement: Number(indemniteLogement),
+        indemniteTransport: Number(indemniteTransport),
+        indemniteFonction: Number(indemniteFonction),
+        indemniteSujetion: Number(indemniteSujetion),
+        indemniteAstreinte: Number(indemniteAstreinte),
+      });
+      onSucces();
+    } catch (e) {
+      setErreur(e instanceof ErreurApi ? e.message : 'Erreur lors de la modification');
+    } finally {
+      setEnCours(false);
+    }
+  }
+
+  return (
+    <Modale titre={`Modifier — ${contrat.employeNom} ${contrat.employePrenoms}`} onFermer={onFermer}>
+      <form onSubmit={soumettre} className="space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={LABEL}>Type</label>
+            <select value={type} onChange={(e) => setType(e.target.value as TypeContrat)} className={CHAMP}>
+              <option value="cdi">CDI — Contrat à Durée Indéterminée</option>
+              <option value="cdd">CDD — Contrat à Durée Déterminée</option>
+              <option value="cdc">CDC — Contrat à durée de chantier</option>
+              <option value="stage">Stage</option>
+            </select>
+          </div>
+          <div>
+            <label className={LABEL}>Date de début</label>
+            <input type="date" value={dateDebut} onChange={(e) => setDateDebut(e.target.value)} required className={CHAMP} />
+          </div>
+          {type !== 'cdi' && (
+            <div>
+              <label className={LABEL}>Date de fin</label>
+              <input type="date" value={dateFin} onChange={(e) => setDateFin(e.target.value)} required className={CHAMP} />
+            </div>
+          )}
+          <div>
+            <label className={LABEL}>Salaire de base</label>
+            <input
+              type="number"
+              value={salaireBase}
+              onChange={(e) => setSalaireBase(e.target.value)}
+              required
+              className={CHAMP}
+            />
+          </div>
+          <div>
+            <label className={LABEL}>Sursalaire</label>
+            <input type="number" value={sursalaire} onChange={(e) => setSursalaire(e.target.value)} className={CHAMP} />
+          </div>
+          <div>
+            <label className={LABEL}>Indemnité de logement</label>
+            <input
+              type="number"
+              value={indemniteLogement}
+              onChange={(e) => setIndemniteLogement(e.target.value)}
+              className={CHAMP}
+            />
+          </div>
+          <div>
+            <label className={LABEL}>Indemnité de transport</label>
+            <input
+              type="number"
+              value={indemniteTransport}
+              onChange={(e) => setIndemniteTransport(e.target.value)}
+              className={CHAMP}
+            />
+          </div>
+          <div>
+            <label className={LABEL}>Indemnité de fonction</label>
+            <input
+              type="number"
+              value={indemniteFonction}
+              onChange={(e) => setIndemniteFonction(e.target.value)}
+              className={CHAMP}
+            />
+          </div>
+          <div>
+            <label className={LABEL}>Indemnité de sujétion</label>
+            <input
+              type="number"
+              value={indemniteSujetion}
+              onChange={(e) => setIndemniteSujetion(e.target.value)}
+              className={CHAMP}
+            />
+          </div>
+          <div>
+            <label className={LABEL}>Indemnité d'astreinte</label>
+            <input
+              type="number"
+              value={indemniteAstreinte}
+              onChange={(e) => setIndemniteAstreinte(e.target.value)}
+              className={CHAMP}
+            />
+          </div>
+        </div>
+        {erreur && <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{erreur}</div>}
+        <button disabled={enCours} className={BOUTON}>
+          {enCours ? 'Enregistrement...' : 'Enregistrer les modifications'}
+        </button>
+      </form>
+    </Modale>
   );
 }
 

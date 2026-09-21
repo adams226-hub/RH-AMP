@@ -84,6 +84,7 @@ function formaterDate(d: Date): string {
 
 function libelleMotifBareme(cle: string | null): string | null {
   if (!cle) return null;
+  if (cle === 'autre') return 'Autre';
   return BAREME_PERMISSIONS_EXCEPTIONNELLES.find((e) => e.cle === cle)?.libelle ?? cle;
 }
 

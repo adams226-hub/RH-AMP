@@ -87,8 +87,10 @@ export function Simulateur() {
         <h2 className="text-lg font-semibold text-slate-900">Simulateur Net → Brut</h2>
       </div>
       <p className="mb-6 text-sm text-slate-500">
-        Retrouve le salaire de base (ou le sursalaire) nécessaire pour atteindre un net à payer souhaité — recrutement,
-        négociation, vérification. Ne modifie rien tant que rien n'est enregistré ailleurs.
+        Retrouve le salaire de base (ou le sursalaire) nécessaire pour atteindre un salaire net souhaité — recrutement,
+        négociation, vérification. Le « net à payer » (après retenue FSP de 1%) est affiché en résultat, mais la
+        valeur ci-dessous cible le salaire net, celle habituellement annoncée à l'embauche. Ne modifie rien tant que
+        rien n'est enregistré ailleurs.
       </p>
 
       {erreur && <div className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{erreur}</div>}
@@ -96,7 +98,7 @@ export function Simulateur() {
       <form onSubmit={calculer} className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div>
-            <label className={LABEL}>Net à payer souhaité</label>
+            <label className={LABEL}>Salaire net souhaité</label>
             <input type="number" value={netCible} onChange={(e) => setNetCible(e.target.value)} required className={CHAMP} />
           </div>
           <div className="col-span-2">
@@ -213,11 +215,12 @@ export function Simulateur() {
             <Ligne libelle="Salaire net imposable" valeur={resultat.bulletin.salaireNetImposable} />
             <Ligne libelle="Base imposable" valeur={resultat.bulletin.baseImposable} />
             <Ligne libelle="IUTS net" valeur={resultat.bulletin.iuts} />
-            <Ligne libelle="Retenue 1%" valeur={resultat.bulletin.fsp} />
             {resultat.bulletin.primeAnciennete > 0 && (
               <Ligne libelle={`Prime d'ancienneté (${resultat.bulletin.ancienneteAnnees} ans)`} valeur={resultat.bulletin.primeAnciennete} />
             )}
-            <Ligne libelle="Net à payer obtenu" valeur={resultat.bulletin.netAPayer} accent />
+            <Ligne libelle="Salaire net obtenu" valeur={resultat.bulletin.salaireNet} accent />
+            <Ligne libelle="Retenue 1% (FSP)" valeur={resultat.bulletin.fsp} />
+            <Ligne libelle="Net à payer obtenu" valeur={resultat.bulletin.netAPayer} />
           </div>
         </div>
       )}

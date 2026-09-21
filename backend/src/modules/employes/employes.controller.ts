@@ -8,13 +8,21 @@ import {
   creerEmploye,
   definirSoumisPointage,
   listerEmployes,
+  modifierEmploye,
   obtenirEmploye,
   obtenirResumeRhEmploye,
 } from './employes.service';
 
-const schemaStatut = z.object({
-  statut: z.enum(['en_cours_creation', 'actif', 'suspendu', 'sorti']),
-});
+const schemaStatut = z
+  .object({
+    statut: z.enum(['en_cours_creation', 'actif', 'suspendu', 'sorti']),
+    dateSortie: z.string().optional(),
+    motifSortie: z.string().optional(),
+  })
+  .refine((d) => d.statut !== 'sorti' || !!d.dateSortie, {
+    message: 'La date de sortie est requise pour marquer un employé sorti',
+    path: ['dateSortie'],
+  });
 
 const schemaChantier = z.object({
   chantierId: z.string().uuid().nullable(),
@@ -46,7 +54,16 @@ const schemaCreationEmploye = z.object({
   dateEmbauche: z.string(),
   categorieProfessionnelle: z.string().min(1).optional(),
   soumisPointage: z.boolean().optional(),
+  situationMatrimoniale: z.string().optional(),
+  groupeSanguin: z.string().optional(),
+  contactUrgenceNom: z.string().optional(),
+  contactUrgenceLien: z.string().optional(),
+  contactUrgenceTel: z.string().optional(),
+  contactUrgenceTel2: z.string().optional(),
+  maladieParticuliere: z.string().optional(),
 });
+
+const schemaModificationEmploye = schemaCreationEmploye.partial();
 
 export async function lister(req: Request, res: Response) {
   const utilisateur = req.utilisateur!;
@@ -102,9 +119,22 @@ export async function creer(req: Request, res: Response) {
   res.status(201).json(employe);
 }
 
+export async function modifier(req: Request, res: Response) {
+  const employe = await obtenirEmploye(req.params.id);
+
+  if (!employe) {
+    throw new ErreurApplicative(404, 'Employé introuvable');
+  }
+
+  await verifierAccesEmploye(req, employe.filialeId, employe.chantierId);
+
+  const donnees = schemaModificationEmploye.parse(req.body);
+  res.json(await modifierEmploye(req.params.id, donnees));
+}
+
 export async function changerStatut(req: Request, res: Response) {
-  const { statut } = schemaStatut.parse(req.body);
-  res.json(await changerStatutEmploye(req.params.id, statut));
+  const { statut, dateSortie, motifSortie } = schemaStatut.parse(req.body);
+  res.json(await changerStatutEmploye(req.params.id, statut, dateSortie, motifSortie));
 }
 
 export async function affecterChantier(req: Request, res: Response) {

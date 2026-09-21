@@ -1,9 +1,9 @@
 import { ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
 import { CodeRole, useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import {
   IconeAbsences,
-  IconeArchivage,
   IconeAttestations,
   IconeAudit,
   IconeConges,
@@ -12,11 +12,12 @@ import {
   IconeCyclePaie,
   IconeDeconnexion,
   IconeEmployes,
+  IconeLune,
   IconePaie,
   IconeParametres,
   IconePointage,
-  IconePostes,
   IconeSimulateur,
+  IconeSoleil,
   IconeTableauxDeBord,
 } from './icones';
 
@@ -29,7 +30,6 @@ interface LienNav {
 
 const LIENS: LienNav[] = [
   { vers: '/employes', libelle: 'Employés', icone: IconeEmployes },
-  { vers: '/postes', libelle: 'Postes', icone: IconePostes, roles: ['super_admin', 'drh_holding', 'rh_filiale'] },
   { vers: '/contrats', libelle: 'Contrats', icone: IconeContrats, roles: ['super_admin', 'drh_holding', 'rh_filiale'] },
   { vers: '/conges', libelle: 'Congés', icone: IconeConges },
   { vers: '/absences', libelle: 'Absences', icone: IconeAbsences },
@@ -59,12 +59,6 @@ const LIENS: LienNav[] = [
     roles: ['super_admin', 'drh_holding', 'rh_filiale'],
   },
   {
-    vers: '/archivage',
-    libelle: 'Archivage',
-    icone: IconeArchivage,
-    roles: ['super_admin', 'drh_holding', 'rh_filiale', 'employe'],
-  },
-  {
     vers: '/attestations',
     libelle: 'Attestations',
     icone: IconeAttestations,
@@ -87,6 +81,7 @@ const LIENS: LienNav[] = [
 
 export function MiseEnPage({ children }: { children: ReactNode }) {
   const { role, deconnecter } = useAuth();
+  const { theme, basculerTheme } = useTheme();
   const liensVisibles = LIENS.filter((lien) => !lien.roles || (role && lien.roles.includes(role)));
 
   return (
@@ -96,7 +91,7 @@ export function MiseEnPage({ children }: { children: ReactNode }) {
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-700 text-sm font-bold text-white">
             AH
           </div>
-          <span className="hidden font-semibold text-slate-800 md:inline">SIRH AMP Holding</span>
+          <span className="hidden font-semibold text-slate-800 md:inline">RH AMP Holding</span>
         </div>
 
         <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-2 py-2 md:px-3">
@@ -123,6 +118,18 @@ export function MiseEnPage({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="border-t border-slate-200 px-2 py-3 md:px-3">
+          <button
+            onClick={basculerTheme}
+            title={theme === 'clair' ? 'Passer en mode sombre' : 'Passer en mode clair'}
+            className="mb-1 flex w-full items-center justify-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-500 transition-all duration-200 ease-in-out hover:bg-slate-100 hover:text-slate-900 md:justify-start"
+          >
+            {theme === 'clair' ? (
+              <IconeLune className="h-[18px] w-[18px] shrink-0" />
+            ) : (
+              <IconeSoleil className="h-[18px] w-[18px] shrink-0" />
+            )}
+            <span className="hidden md:inline">{theme === 'clair' ? 'Mode sombre' : 'Mode clair'}</span>
+          </button>
           <button
             onClick={deconnecter}
             title="Déconnexion"

@@ -1,6 +1,30 @@
 import { pool } from '../../config/db';
 import { ErreurApplicative } from '../../middleware/gestionErreurs';
-import { Contrat, ContratAvecEmploye, CreationContrat, RenouvellementContrat, RuptureContrat } from './contrats.types';
+import {
+  Contrat,
+  ContratAvecEmploye,
+  CreationContrat,
+  ModificationContrat,
+  RenouvellementContrat,
+  RuptureContrat,
+} from './contrats.types';
+
+// Correspondance champ (camelCase) -> colonne (snake_case) pour la mise à jour partielle de
+// modifierContrat — même principe que employes.service.ts COLONNES_MODIFIABLES.
+const COLONNES_MODIFIABLES: Record<keyof ModificationContrat, string> = {
+  type: 'type',
+  dateDebut: 'date_debut',
+  dateFin: 'date_fin',
+  dureeEssaiJours: 'duree_essai_jours',
+  fonctionId: 'fonction_id',
+  salaireBase: 'salaire_base',
+  sursalaire: 'sursalaire',
+  indemniteLogement: 'indemnite_logement',
+  indemniteTransport: 'indemnite_transport',
+  indemniteFonction: 'indemnite_fonction',
+  indemniteSujetion: 'indemnite_sujetion',
+  indemniteAstreinte: 'indemnite_astreinte',
+};
 
 function mapLigne(l: Record<string, unknown>): Contrat {
   return {
@@ -140,6 +164,51 @@ export async function activerContrat(id: string): Promise<Contrat> {
   return mapLigne(rows[0]);
 }
 
+// Réservé aux contrats pas encore actifs : une fois actif, un contrat sert de base au calcul de
+// paie (paie.ts) et à l'historique — toute correction doit passer par Renouveler (nouvelle ligne,
+// contrat_precedent_id) plutôt que réécrire silencieusement un contrat déjà en usage.
+export async function modifierContrat(id: string, donnees: ModificationContrat): Promise<Contrat> {
+  const contrat = await obtenirContrat(id);
+
+  if (!contrat) {
+    throw new ErreurApplicative(404, 'Contrat introuvable');
+  }
+
+  if (contrat.statut !== 'brouillon' && contrat.statut !== 'signe') {
+    throw new ErreurApplicative(
+      409,
+      `Impossible de modifier un contrat au statut « ${contrat.statut} » — utilisez Renouveler pour un contrat actif`
+    );
+  }
+
+  const typeResultant = donnees.type ?? contrat.type;
+  const dateFinResultante = donnees.dateFin !== undefined ? donnees.dateFin : contrat.dateFin;
+  if (typeResultant !== 'cdi' && !dateFinResultante) {
+    throw new ErreurApplicative(400, 'date_fin est obligatoire pour un CDD, un CDC ou un Stage');
+  }
+
+  const entrees = (Object.entries(donnees) as [keyof ModificationContrat, unknown][]).filter(
+    ([, valeur]) => valeur !== undefined
+  );
+
+  if (entrees.length === 0) return contrat;
+
+  const clauses: string[] = [];
+  const valeurs: unknown[] = [];
+  for (const [cle, valeur] of entrees) {
+    valeurs.push(valeur);
+    clauses.push(`${COLONNES_MODIFIABLES[cle]} = $${valeurs.length}`);
+  }
+  valeurs.push(id);
+
+  const { rows } = await pool.query(
+    `UPDATE contrats SET ${clauses.join(', ')}, updated_at = now() WHERE id = $${valeurs.length} RETURNING *`,
+    valeurs
+  );
+
+  return mapLigne(rows[0]);
+}
+
 export async function renouvelerContrat(id: string, donnees: RenouvellementContrat): Promise<Contrat> {
   const contratActuel = await obtenirContrat(id);
 
@@ -192,16 +261,45 @@ export async function renouvelerContrat(id: string, donnees: RenouvellementContr
   }
 }
 
+// Rompre le contrat ACTIF d'un employé = son départ : bascule automatiquement l'employé sur le
+// statut "sorti" (même date/motif), pour que la fiche employé et les Tableaux de bord (turnover,
+// sorties) restent cohérents avec le contrat sans double saisie RH — cf. décision produit. Un
+// contrat rompu qui n'était pas actif (rare, rompu via l'API sans passer par le bouton dédié à
+// l'écran Contrats, qui ne l'affiche que sur un contrat actif) ne déclenche pas ce basculement.
 export async function romprecontrat(id: string, donnees: RuptureContrat): Promise<Contrat> {
-  const { rows } = await pool.query(
-    `UPDATE contrats SET statut = 'rompu', date_rupture = $2, motif_rupture = $3, updated_at = now()
-     WHERE id = $1 RETURNING *`,
-    [id, donnees.dateRupture, donnees.motifRupture]
-  );
+  const client = await pool.connect();
 
-  if (!rows[0]) {
-    throw new ErreurApplicative(404, 'Contrat introuvable');
+  try {
+    await client.query('BEGIN');
+
+    const { rows: avantRows } = await client.query('SELECT employe_id, statut FROM contrats WHERE id = $1 FOR UPDATE', [
+      id,
+    ]);
+    if (!avantRows[0]) {
+      throw new ErreurApplicative(404, 'Contrat introuvable');
+    }
+    const statutAvant = avantRows[0].statut as string;
+    const employeId = avantRows[0].employe_id as string;
+
+    const { rows } = await client.query(
+      `UPDATE contrats SET statut = 'rompu', date_rupture = $2, motif_rupture = $3, updated_at = now()
+       WHERE id = $1 RETURNING *`,
+      [id, donnees.dateRupture, donnees.motifRupture]
+    );
+
+    if (statutAvant === 'actif') {
+      await client.query(
+        `UPDATE employes SET statut = 'sorti', date_sortie = $2, motif_sortie = $3, updated_at = now() WHERE id = $1`,
+        [employeId, donnees.dateRupture, donnees.motifRupture]
+      );
+    }
+
+    await client.query('COMMIT');
+    return mapLigne(rows[0]);
+  } catch (erreur) {
+    await client.query('ROLLBACK');
+    throw erreur;
+  } finally {
+    client.release();
   }
-
-  return mapLigne(rows[0]);
 }

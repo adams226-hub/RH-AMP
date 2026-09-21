@@ -1,6 +1,10 @@
 export interface Filiale {
   id: string;
   nom: string;
+  // Dénomination juridique complète (ex. "African Mining Partenair (AMP) SA"), distincte du nom
+  // court `nom` (ex. "AMP") — utilisée dans les attestations (cf. attestations.service.ts) ; null
+  // = repli sur `nom`.
+  raisonSociale: string | null;
   ville: string | null;
   pays: string;
   // Coordonnées légales affichées en pied de bulletin de paie — une valeur par filiale.
@@ -17,6 +21,7 @@ export interface Filiale {
 }
 
 export interface CoordonneesLegalesFiliale {
+  raisonSociale?: string;
   adresse?: string;
   rccm?: string;
   ifu?: string;

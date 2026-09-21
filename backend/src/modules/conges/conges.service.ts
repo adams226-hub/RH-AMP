@@ -31,7 +31,8 @@ function mapSolde(l: Record<string, unknown>): SoldeConge {
   };
 }
 
-// Jours ouvrés (hors week-ends et jours fériés) entre deux dates incluses.
+// Jours ouvrables (semaine de 6 jours : seuls dimanche et les jours fériés sont exclus — même
+// convention que le module Pointage, cf. pointage.calcul.ts) entre deux dates incluses.
 async function calculerNbJoursOuvres(client: PoolClient, dateDebut: string, dateFin: string): Promise<number> {
   const { rows: feries } = await client.query('SELECT date FROM jours_feries WHERE date BETWEEN $1 AND $2', [
     dateDebut,
@@ -47,7 +48,7 @@ async function calculerNbJoursOuvres(client: PoolClient, dateDebut: string, date
     const jourSemaine = curseur.getDay();
     const iso = curseur.toISOString().slice(0, 10);
 
-    if (jourSemaine !== 0 && jourSemaine !== 6 && !datesFeriees.has(iso)) {
+    if (jourSemaine !== 0 && !datesFeriees.has(iso)) {
       nbJours += 1;
     }
 
@@ -65,10 +66,19 @@ async function obtenirOuCreerSolde(client: PoolClient, employeId: string, annee:
 
   if (rows[0]) return mapSolde(rows[0]);
 
+  // Report automatique et illimité du solde disponible de l'année précédente (décision produit) —
+  // recherché uniquement sur N-1 : si aucune ligne n'existe pour N-1 (premier enregistrement de
+  // l'employé, ou année sans aucune activité de congé), le report est simplement 0.
+  const { rows: precedent } = await client.query(
+    'SELECT solde_disponible FROM soldes_conges WHERE employe_id = $1 AND annee = $2',
+    [employeId, annee - 1]
+  );
+  const report = precedent[0] ? Number(precedent[0].solde_disponible) : 0;
+
   // Montant d'acquisition annuelle fixé à 30 j — méthode de proratisation mensuelle non tranchée, cf. specs Congés §7.
   const { rows: creees } = await client.query(
-    `INSERT INTO soldes_conges (employe_id, annee, jours_acquis) VALUES ($1, $2, 30) RETURNING *`,
-    [employeId, annee]
+    `INSERT INTO soldes_conges (employe_id, annee, solde_initial, jours_acquis) VALUES ($1, $2, $3, 30) RETURNING *`,
+    [employeId, annee, report]
   );
 
   return mapSolde(creees[0]);

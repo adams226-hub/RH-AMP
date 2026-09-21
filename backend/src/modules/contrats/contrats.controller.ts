@@ -8,6 +8,7 @@ import {
   listerContratsEmploye,
   listerContratsExpirantBientot,
   listerTousContrats,
+  modifierContrat,
   obtenirContrat,
   romprecontrat,
   renouvelerContrat,
@@ -32,6 +33,8 @@ const schemaCreation = z.object({
   salaireBase: z.number().nonnegative(),
   ...composantesRemuneration,
 });
+
+const schemaModification = schemaCreation.omit({ employeId: true }).partial();
 
 const schemaRenouvellement = z.object({
   dateDebut: z.string(),
@@ -75,6 +78,11 @@ export async function obtenir(req: Request, res: Response) {
 export async function creer(req: Request, res: Response) {
   const donnees = schemaCreation.parse(req.body);
   res.status(201).json(await creerContrat(donnees));
+}
+
+export async function modifier(req: Request, res: Response) {
+  const donnees = schemaModification.parse(req.body);
+  res.json(await modifierContrat(req.params.id, donnees));
 }
 
 export async function activer(req: Request, res: Response) {

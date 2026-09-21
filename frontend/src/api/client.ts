@@ -1,4 +1,3 @@
-import { DocumentArchive } from '../types/archivage';
 import { ResultatAudit } from '../types/audit';
 import {
   MasseSalarialeReponse,
@@ -8,6 +7,7 @@ import {
 } from '../types/tableauDeBord';
 import { FiltresRHOverview, RHOverviewReponse } from '../types/rhOverview';
 import { DemandeConge, DemandeCongeAvecEmploye, SoldeConge } from '../types/conges';
+import { DemandeCongeSpecial, DemandeCongeSpecialAvecEmploye, TypeCongeSpecial } from '../types/congesSpeciaux';
 import {
   ClassificationAbsence,
   DemandeAbsence,
@@ -136,14 +136,58 @@ export const api = {
       modePaiement?: string;
       personnesACharge?: number;
       filialeId: string;
+      fonctionId?: string;
       chantierId?: string;
       dateEmbauche: string;
       categorieProfessionnelle?: string;
       soumisPointage?: boolean;
+      situationMatrimoniale?: string;
+      groupeSanguin?: string;
+      contactUrgenceNom?: string;
+      contactUrgenceLien?: string;
+      contactUrgenceTel?: string;
+      contactUrgenceTel2?: string;
+      maladieParticuliere?: string;
     }
   ) => requete<Employe>('/api/employes', { method: 'POST', body: JSON.stringify(donnees) }, jeton),
-  changerStatutEmploye: (jeton: string, id: string, statut: Employe['statut']) =>
-    requete<Employe>(`/api/employes/${id}/statut`, { method: 'POST', body: JSON.stringify({ statut }) }, jeton),
+  modifierEmploye: (
+    jeton: string,
+    id: string,
+    donnees: Partial<{
+      matricule: string;
+      nom: string;
+      prenoms: string;
+      dateNaissance: string;
+      sexe: 'M' | 'F';
+      nationalite: string;
+      telephone: string;
+      numCnib: string;
+      numCnss: string;
+      rib: string;
+      banque: string;
+      modePaiement: string;
+      personnesACharge: number;
+      filialeId: string;
+      fonctionId: string;
+      chantierId: string;
+      dateEmbauche: string;
+      categorieProfessionnelle: string;
+      soumisPointage: boolean;
+      situationMatrimoniale: string;
+      groupeSanguin: string;
+      contactUrgenceNom: string;
+      contactUrgenceLien: string;
+      contactUrgenceTel: string;
+      contactUrgenceTel2: string;
+      maladieParticuliere: string;
+    }>
+  ) => requete<Employe>(`/api/employes/${id}`, { method: 'PATCH', body: JSON.stringify(donnees) }, jeton),
+  changerStatutEmploye: (jeton: string, id: string, statut: Employe['statut'], dateSortie?: string, motifSortie?: string) =>
+    requete<Employe>(
+      `/api/employes/${id}/statut`,
+      { method: 'POST', body: JSON.stringify({ statut, dateSortie, motifSortie }) },
+      jeton
+    ),
   affecterChantierEmploye: (jeton: string, id: string, chantierId: string | null) =>
     requete<Employe>(`/api/employes/${id}/chantier`, { method: 'POST', body: JSON.stringify({ chantierId }) }, jeton),
   changerSoumisPointageEmploye: (jeton: string, id: string, soumisPointage: boolean) =>
@@ -161,7 +205,15 @@ export const api = {
   modifierCoordonneesFiliale: (
     jeton: string,
     id: string,
-    donnees: { adresse?: string; rccm?: string; ifu?: string; telephone?: string; siteWeb?: string; couleurAccent?: string }
+    donnees: {
+      raisonSociale?: string;
+      adresse?: string;
+      rccm?: string;
+      ifu?: string;
+      telephone?: string;
+      siteWeb?: string;
+      couleurAccent?: string;
+    }
   ) => requete<Filiale>(`/api/postes/filiales/${id}/coordonnees`, { method: 'PATCH', body: JSON.stringify(donnees) }, jeton),
   uploaderLogoFiliale: (jeton: string, id: string, fichier: File) => {
     const forme = new FormData();
@@ -209,6 +261,16 @@ export const api = {
       salaireBase: number;
     } & ComposantesRemuneration
   ) => requete<Contrat>('/api/contrats', { method: 'POST', body: JSON.stringify(donnees) }, jeton),
+  modifierContrat: (
+    jeton: string,
+    id: string,
+    donnees: Partial<{
+      type: string;
+      dateDebut: string;
+      dateFin: string;
+      salaireBase: number;
+    } & ComposantesRemuneration>
+  ) => requete<Contrat>(`/api/contrats/${id}`, { method: 'PATCH', body: JSON.stringify(donnees) }, jeton),
   activerContrat: (jeton: string, id: string) =>
     requete<Contrat>(`/api/contrats/${id}/activer`, { method: 'POST' }, jeton),
   renouvelerContrat: (
@@ -234,6 +296,36 @@ export const api = {
   deciderConge: (jeton: string, id: string, decision: 'validee' | 'rejetee') =>
     requete<DemandeConge>(`/api/conges/demandes/${id}/decision`, { method: 'POST', body: JSON.stringify({ decision }) }, jeton),
 
+  // Congés spéciaux (maternité / paternité) — droit légal distinct, ne consomme jamais le solde
+  // de congé administratif (30j/an).
+  listerDemandesCongesSpeciaux: (jeton: string, employeId: string) =>
+    requete<DemandeCongeSpecial[]>(`/api/conges-speciaux/demandes?employeId=${employeId}`, {}, jeton),
+  listerToutesDemandesCongesSpeciaux: (jeton: string) =>
+    requete<DemandeCongeSpecialAvecEmploye[]>('/api/conges-speciaux/demandes', {}, jeton),
+  creerDemandeCongeSpecial: (
+    jeton: string,
+    donnees: {
+      employeId: string;
+      type: TypeCongeSpecial;
+      dateDebut: string;
+      dateFin?: string;
+      justificatifFourni?: boolean;
+      motif?: string;
+    }
+  ) => requete<DemandeCongeSpecial>('/api/conges-speciaux/demandes', { method: 'POST', body: JSON.stringify(donnees) }, jeton),
+  deciderCongeSpecial: (
+    jeton: string,
+    id: string,
+    decision: 'validee' | 'rejetee',
+    dateFin?: string,
+    commentaire?: string
+  ) =>
+    requete<DemandeCongeSpecial>(
+      `/api/conges-speciaux/demandes/${id}/decision`,
+      { method: 'POST', body: JSON.stringify({ decision, dateFin, commentaire }) },
+      jeton
+    ),
+
   // Absences (permissions exceptionnelles / absences hors barème)
   obtenirBaremePermissions: (jeton: string) => requete<EvenementBareme[]>('/api/absences/bareme', {}, jeton),
   obtenirSoldePermission: (jeton: string, employeId: string, annee: number) =>
@@ -258,6 +350,23 @@ export const api = {
       justificatifFourni?: boolean;
     }
   ) => requete<DemandeAbsence>('/api/absences/demandes', { method: 'POST', body: JSON.stringify(donnees) }, jeton),
+  modifierDemandeAbsence: (
+    jeton: string,
+    id: string,
+    donnees: {
+      type?: TypeDemandeAbsence;
+      motifBareme?: string;
+      motif?: string;
+      dateDebut?: string;
+      dateFin?: string;
+      justificatifFourni?: boolean;
+    }
+  ) =>
+    requete<DemandeAbsence>(
+      `/api/absences/demandes/${id}`,
+      { method: 'PUT', body: JSON.stringify(donnees) },
+      jeton
+    ),
   donnerAvisAbsence: (jeton: string, id: string, avis: 'favorable' | 'defavorable') =>
     requete<DemandeAbsence>(`/api/absences/demandes/${id}/avis`, { method: 'POST', body: JSON.stringify({ avis }) }, jeton),
   deciderAbsence: (
@@ -272,15 +381,26 @@ export const api = {
       jeton
     ),
   obtenirFicheAbsencePdf: (jeton: string, id: string) => requeteBlob(`/api/absences/demandes/${id}/fiche`, jeton),
+  exporterAbsencesExcel: (jeton: string) => requeteBlob('/api/absences/export-excel', jeton),
 
   // Missions (outil de suivi départ/retour, statut calculé)
   listerMissions: (jeton: string) => requete<MissionAvecEmploye[]>('/api/missions', {}, jeton),
   creerMission: (
     jeton: string,
-    donnees: { employeId: string; destination: string; motif: string; dateDepart: string; dateRetourPrevue: string }
+    donnees: {
+      employeId: string;
+      numeroOrdreMission: string;
+      destination: string;
+      motif: string;
+      dateDepart: string;
+      dateRetourPrevue: string;
+      montantHebergement?: number;
+      montantRestauration?: number;
+    }
   ) => requete<Mission>('/api/missions', { method: 'POST', body: JSON.stringify(donnees) }, jeton),
   enregistrerRetourMission: (jeton: string, id: string, dateRetourReelle: string) =>
     requete<Mission>(`/api/missions/${id}/retour`, { method: 'POST', body: JSON.stringify({ dateRetourReelle }) }, jeton),
+  exporterMissionsExcel: (jeton: string) => requeteBlob('/api/missions/export-excel', jeton),
 
   // Pointage
   listerChantiers: (jeton: string, inclureArchives = false) =>
@@ -448,27 +568,6 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ actif }) },
       jeton
     ),
-
-  // Archivage
-  listerDocuments: (jeton: string, employeId?: string, categorie?: string, recherche?: string) => {
-    const query = new URLSearchParams();
-    if (employeId) query.set('employeId', employeId);
-    if (categorie) query.set('categorie', categorie);
-    if (recherche) query.set('recherche', recherche);
-    const qs = query.toString();
-    return requete<DocumentArchive[]>(`/api/archivage/documents${qs ? `?${qs}` : ''}`, {}, jeton);
-  },
-  deposerDocument: (jeton: string, fichier: File, categorie: string, employeId?: string) => {
-    const forme = new FormData();
-    forme.append('fichier', fichier);
-    forme.append('categorie', categorie);
-    if (employeId) forme.append('employeId', employeId);
-    return requeteFichier<DocumentArchive>('/api/archivage/documents', forme, jeton);
-  },
-  telechargerDocument: (jeton: string, id: string) =>
-    requete<{ url: string }>(`/api/archivage/documents/${id}/telecharger`, {}, jeton),
-  supprimerDocument: (jeton: string, id: string) =>
-    requete<void>(`/api/archivage/documents/${id}`, { method: 'DELETE' }, jeton),
 
   // Tableaux de bord
   obtenirEffectif: (jeton: string) => requete<{ parStatut: { statut: string; total: number }[]; parFiliale: { filiale: string; total: number }[] }>(

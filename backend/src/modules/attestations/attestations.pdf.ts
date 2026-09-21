@@ -59,9 +59,16 @@ async function chargerDonneesPdf(id: string): Promise<DonneesPdf> {
   };
 }
 
+// Format "18 octobre 2025" (jour sur 2 chiffres + mois en toutes lettres) — celui utilisé sur
+// les 4 vrais documents AMP/ROMBAT GOLD, jamais le format numérique "18/10/2025".
+const MOIS_FR_MINUSCULE = [
+  'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+  'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
+];
+
 function formaterDateFr(iso: string): string {
   const [annee, mois, jour] = iso.slice(0, 10).split('-');
-  return `${jour}/${mois}/${annee}`;
+  return `${jour.padStart(2, '0')} ${MOIS_FR_MINUSCULE[Number(mois) - 1]} ${annee}`;
 }
 
 function civilite(sexe: 'M' | 'F'): { titre: string; ne: string; employe: string; il: string } {
@@ -70,52 +77,65 @@ function civilite(sexe: 'M' | 'F'): { titre: string; ne: string; employe: string
     : { titre: 'Monsieur', ne: 'né', employe: 'employé', il: 'il' };
 }
 
+// Élision "de" → "d'" devant un mot commençant par une voyelle (ou h muet) — cf. modèle
+// CERTIFICAT_DE_TRAVAIL_AMP : "en qualité d'Opérateur Niveau", pas "en qualité de Opérateur".
+function deElide(mot: string): string {
+  return /^[aeiouyhàâäéèêëïîôöùûü]/i.test(mot) ? `d'${mot}` : `de ${mot}`;
+}
+
+// Formulations calquées sur les modèles Word réels de l'entreprise (ATTESTATION_DE_TRAVAIL_AMP,
+// CERTIFICAT_DE_TRAVAIL_AMP, ATTESTATION_DE_STAGE) — port fidèle, ne pas réintroduire les clauses
+// (type de contrat, lieu d'affectation, motif de départ...) que ces modèles n'utilisent pas.
 function paragraphesAttTrav(d: DonneesAttestationTravail): string[] {
   const c = civilite(d.sexe);
-  const identite = [
-    `${c.titre} ${d.nomPrenomsEmploye}`,
-    d.dateNaissance ? `${c.ne}(e) le ${formaterDateFr(d.dateNaissance)}${d.lieuNaissance ? ` à ${d.lieuNaissance}` : ''}` : null,
-    `titulaire de la pièce d'identité N° ${d.numeroPiece}`,
-  ]
-    .filter(Boolean)
-    .join(', ');
+  const naissance = d.dateNaissance
+    ? ` ${c.ne} le ${formaterDateFr(d.dateNaissance)}${d.lieuNaissance ? ` à ${d.lieuNaissance}` : ''}`
+    : '';
 
   return [
-    `Je soussigné(e), ${d.nomDirigeant || '________________'}, ${d.fonctionDirigeant || '________________'} de la société ${d.entreprise}, certifie que :`,
-    `${identite}.`,
-    `est ${c.employe}(e) au sein de notre société depuis le ${formaterDateFr(d.dateEmbauche)}, en qualité de ${d.poste || '________________'}, sous contrat ${d.typeContrat}.`,
-    `À ce jour, ${c.il}/elle occupe toujours ce poste au sein de ${d.filiale}, ${d.lieuAffectation}.`,
-    `La présente attestation est délivrée à l'intéressé(e) pour servir et valoir ce que de droit.`,
+    `Je soussigné, ${d.nomDirigeant || '________________'}, ${d.fonctionDirigeant || '________________'} de ${d.entreprise} atteste que ${c.titre} ${d.nomPrenomsEmploye}${naissance}, matricule ${d.matricule} est ${c.employe} depuis le ${formaterDateFr(d.dateEmbauche)} à nos jours en qualité ${deElide(d.poste || '________________')}.`,
+    `En foi de quoi, la présente attestation de travail lui est délivrée pour servir et valoir ce que de droit.`,
   ];
 }
 
 function paragraphesCertTrav(d: DonneesCertificatTravail): string[] {
   const c = civilite(d.sexe);
-  const postes = d.postesOccupes
-    .map((p) => `   - ${p.poste}, du ${formaterDateFr(p.dateDebut)} au ${p.dateFin ? formaterDateFr(p.dateFin) : "ce jour"}`)
-    .join('\n');
+  const naissance = d.dateNaissance
+    ? ` ${c.ne} le ${formaterDateFr(d.dateNaissance)}${d.lieuNaissance ? ` à ${d.lieuNaissance}` : ''}`
+    : '';
+
+  // Un seul poste : rendu en ligne, comme le modèle. Plusieurs postes successifs (obligation
+  // légale de tous les lister, cf. SPEC_MODULE_ATTESTATIONS_AMP.md §3) : rendu en liste à puces.
+  const qualite =
+    d.postesOccupes.length <= 1
+      ? `en qualité ${deElide(d.postesOccupes[0]?.poste ?? '________________')}`
+      : `en qualité de :\n${d.postesOccupes
+          .map((p) => `   - ${p.poste}, du ${formaterDateFr(p.dateDebut)} au ${p.dateFin ? formaterDateFr(p.dateFin) : 'ce jour'}`)
+          .join('\n')}`;
 
   return [
-    `Je soussigné(e), ${d.nomDirigeant || '________________'}, ${d.fonctionDirigeant || '________________'} de la société ${d.entreprise}, certifie que :`,
-    `${c.titre} ${d.nomPrenomsEmploye}`,
-    `a été ${c.employe}(e) au sein de notre société du ${formaterDateFr(d.dateEmbauche)} au ${formaterDateFr(d.dateSortie)}, soit une durée de ${d.dureeService}, en qualité de :`,
-    postes,
-    `${c.il === 'il' ? 'Il' : 'Elle'} quitte notre société${d.motifDepart ? ` ${d.motifDepart}` : ''}.`,
-    `Le présent certificat est délivré pour servir et valoir ce que de droit.`,
+    `Je soussigné, ${d.nomDirigeant || '________________'}, ${d.fonctionDirigeant || '________________'} de ${d.entreprise} certifie que ${c.titre} ${d.nomPrenomsEmploye}${naissance}, matricule ${d.matricule} a été ${c.employe} dans notre entreprise durant la période du ${formaterDateFr(d.dateEmbauche)} au ${formaterDateFr(d.dateSortie)} ${qualite}.`,
+    `En foi de quoi, le présent certificat de travail lui est délivré pour servir et valoir ce que de droit.`,
   ];
 }
 
 function paragraphesAttStage(d: DonneesAttestationStage): string[] {
   const c = civilite(d.sexe);
-  const missions = d.descriptionMissions ? `Durant cette période, ${c.il}/elle a été affecté(e) aux tâches suivantes :\n${d.descriptionMissions}` : null;
+  const naissance = d.dateNaissance
+    ? ` ${c.ne} le ${formaterDateFr(d.dateNaissance)}${d.lieuNaissance ? ` à ${d.lieuNaissance}` : ''}`
+    : '';
+  const etablissement = d.etablissement ? `, étudiant(e) à ${d.etablissement}` : '';
+  const section = d.service ? ` au service ${d.service}` : '';
+  const superviseur = d.superviseur ? `, sous la supervision de ${d.superviseur}` : '';
+  const missions = d.descriptionMissions
+    ? `Durant cette période, ${c.il}/elle a été affecté(e) aux tâches suivantes :\n${d.descriptionMissions}`
+    : null;
 
   return [
-    `Je soussigné(e), ${d.nomDirigeant || '________________'}, ${d.fonctionDirigeant || '________________'} de la société ${d.entreprise}, certifie que :`,
-    `${c.titre} ${d.nomPrenomsStagiaire}, étudiant(e) en ${d.filiereEtudes || '________________'} à ${d.etablissement || '________________'},`,
-    `a effectué un stage au sein de notre société du ${formaterDateFr(d.dateDebutStage)} au ${formaterDateFr(d.dateFinStage)}, soit une durée de ${d.dureeStage}${d.service ? `, au sein du service ${d.service}` : ''}${d.superviseur ? `, sous la supervision de ${d.superviseur}` : ''}.`,
+    `Je soussigné, ${d.nomDirigeant || '________________'}, ${d.fonctionDirigeant || '________________'} de ${d.entreprise} atteste que ${c.titre} ${d.nomPrenomsStagiaire}${naissance}${etablissement}, a effectué son stage pratique en ${d.filiereEtudes || '________________'}${section} durant la période du ${formaterDateFr(d.dateDebutStage)} au ${formaterDateFr(d.dateFinStage)}${superviseur}.`,
     missions,
     d.appreciation || null,
-    `La présente attestation est délivrée à l'intéressé(e) pour servir et valoir ce que de droit, notamment dans le cadre de son cursus académique.`,
+    `En foi de quoi, la présente attestation de stage lui est délivrée pour servir et valoir ce que de droit.`,
   ].filter((p): p is string => p !== null);
 }
 
@@ -142,25 +162,45 @@ export async function genererAttestationPdf(id: string): Promise<Buffer> {
   doc.rect(0, 0, largeurPage, 8).fillColor(couleur).fill();
   doc.fillColor('#000');
 
-  // En-tête société — nom de la filiale dans sa couleur d'accent à gauche, logo à droite s'il a
-  // été déposé (Paramètres > Référentiels), sinon repli sur le texte seul.
-  doc.font('Helvetica-Bold').fontSize(15).fillColor(couleur).text(d.filialeNom, xGauche, 26, { width: largeurTotale - 70 });
-  doc.fillColor('#000');
+  // En-tête société — logo seul en haut à gauche s'il a été déposé (Paramètres > Référentiels),
+  // calqué sur le vrai document scanné ROMBAT GOLD (le nom de la société est déjà intégré au
+  // logo, donc jamais répété en texte à côté) ; repli sur le nom de la filiale en texte seul
+  // uniquement si aucun logo n'existe encore pour cette filiale.
+  // Logo agrandi (150x150, remonté en haut de page) — le reste de l'en-tête (séparateur, titre)
+  // est décalé plus bas d'autant, même principe que paie.pdf.ts pour un logo agrandi.
+  let logoAffiche = false;
   if (logo) {
     try {
-      doc.image(logo, largeurPage - 40 - 55, 20, { fit: [55, 55] });
+      doc.image(logo, xGauche, 15, { fit: [150, 150] });
+      logoAffiche = true;
     } catch {
       // Fichier corrompu/format non supporté par pdfkit — le document doit quand même se générer.
     }
   }
+  if (!logoAffiche) {
+    doc.font('Helvetica-Bold').fontSize(15).fillColor(couleur).text(d.filialeNom, xGauche, 26, { width: largeurTotale });
+    doc.fillColor('#000');
+  }
 
-  doc.moveTo(xGauche, 92).lineTo(xGauche + largeurTotale, 92).strokeColor('#ddd').lineWidth(1).stroke();
+  const ySepatareur = logoAffiche ? 175 : 92;
+  doc.moveTo(xGauche, ySepatareur).lineTo(xGauche + largeurTotale, ySepatareur).strokeColor('#ddd').lineWidth(1).stroke();
 
-  doc.font('Helvetica-Bold').fontSize(16).fillColor('#000').text(TITRES[d.type], xGauche, 108, { width: largeurTotale, align: 'center' });
-  doc.font('Helvetica').fontSize(10).text(`N° ${d.numeroComplet}`, xGauche, 130, { width: largeurTotale, align: 'center' });
+  // Titre encadré (police avec empattements, gros corps) — calqué sur les modèles Word réels de
+  // l'entreprise (bordure épaisse dans la couleur d'accent de la filiale, texte casé à gauche).
+  const yBoiteTitre = ySepatareur + 16;
+  const hauteurBoiteTitre = 62;
+  doc.rect(xGauche, yBoiteTitre, largeurTotale, hauteurBoiteTitre).lineWidth(3).strokeColor(couleur).stroke();
+  doc.font('Times-Bold').fontSize(30).fillColor('#000').text(TITRES[d.type], xGauche + 18, yBoiteTitre + 17, {
+    width: largeurTotale - 36,
+  });
 
-  doc.y = 165;
-  doc.font('Helvetica').fontSize(11);
+  doc.font('Times-Roman').fontSize(10).fillColor('#666').text(`N° ${d.numeroComplet}`, xGauche, yBoiteTitre + hauteurBoiteTitre + 8, {
+    width: largeurTotale,
+    align: 'right',
+  });
+
+  doc.y = yBoiteTitre + hauteurBoiteTitre + 34;
+  doc.font('Times-Roman').fontSize(14).fillColor('#000');
 
   const paragraphes =
     d.type === 'att_trav'
@@ -175,22 +215,28 @@ export async function genererAttestationPdf(id: string): Promise<Buffer> {
   }
 
   doc.moveDown(2);
-  doc.font('Helvetica').fontSize(10).text(`Fait à Ouagadougou, le ${formaterDateFr(d.donnees.dateEmission)}`, xGauche, doc.y, {
+  doc.font('Times-Roman').fontSize(13).text(`Ouagadougou, le ${formaterDateFr(d.donnees.dateEmission)}`, xGauche, doc.y, {
     width: largeurTotale,
     align: 'right',
   });
   doc.moveDown(0.5);
-  doc.font('Helvetica-Bold').text(d.donnees.fonctionSignataire || '________________', xGauche, doc.y, {
+  doc.text(`Le ${d.donnees.fonctionSignataire || d.donnees.fonctionDirigeant || '________________'}`, xGauche, doc.y, {
     width: largeurTotale,
     align: 'right',
   });
+  doc.moveDown(1.5);
+  doc.font('Times-Bold').text(d.donnees.nomDirigeant || '________________', xGauche, doc.y, {
+    width: largeurTotale,
+    align: 'right',
+    underline: true,
+  });
 
-  // Pied de page ancré en position fixe (mêmes coordonnées éprouvées que paie.pdf.ts : y=770/782
-  // avec margin:40, page A4 de 841,89 pt de haut) plutôt qu'à la suite du texte — le bas de page
-  // est toujours habillé, quelle que soit la longueur du corps du document. Une position trop
-  // proche de la limite bas-de-page (page.height − margin) déclenche un saut de page automatique
-  // de pdfkit qui fait disparaître le texte sur une page 2 vide — d'où la marge de sécurité ici.
-  doc.moveTo(xGauche, 758).lineTo(xGauche + largeurTotale, 758).strokeColor(couleur).lineWidth(1.5).stroke();
+  // Pied de page en position dynamique (dépend de la hauteur réellement occupée au-dessus,
+  // elle-même variable selon le logo/la taille de police) plutôt qu'en position fixe — évite un
+  // chevauchement ou un saut de page automatique de pdfkit si le contenu s'allonge.
+  doc.moveDown(3);
+  const yPiedDivider = doc.y;
+  doc.moveTo(xGauche, yPiedDivider).lineTo(xGauche + largeurTotale, yPiedDivider).strokeColor(couleur).lineWidth(1.5).stroke();
 
   const piedLignes = [
     d.filialeAdresse,
@@ -199,14 +245,10 @@ export async function genererAttestationPdf(id: string): Promise<Buffer> {
     d.filialeTelephone ? `Tél : ${d.filialeTelephone}` : null,
   ].filter(Boolean);
 
-  doc.font('Helvetica').fontSize(7).fillColor('#666');
+  doc.font('Helvetica').fontSize(8).fillColor('#666');
   if (piedLignes.length > 0) {
-    doc.text(piedLignes.join(' – '), xGauche, 768, { width: largeurTotale, align: 'center' });
+    doc.text(piedLignes.join(' – '), xGauche, yPiedDivider + 10, { width: largeurTotale, align: 'center' });
   }
-  doc.fillColor('#999').text(`Document généré automatiquement — N° ${d.numeroComplet}`, xGauche, 780, {
-    width: largeurTotale,
-    align: 'center',
-  });
 
   doc.end();
   return fin;

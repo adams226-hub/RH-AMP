@@ -25,10 +25,19 @@ export interface Employe {
   chantierId: string | null;
   dateEmbauche: string;
   statut: StatutEmploye;
+  dateSortie: string | null;
+  motifSortie: string | null;
   categorieProfessionnelle: string | null;
   // Indépendant de chantierId et de l'existence d'un contrat — décision RH explicite, pilote le
   // blocage de paie tant que le pointage du mois n'est pas validé (cf. paie.ts).
   soumisPointage: boolean;
+  situationMatrimoniale: string | null;
+  groupeSanguin: string | null;
+  contactUrgenceNom: string | null;
+  contactUrgenceLien: string | null;
+  contactUrgenceTel: string | null;
+  contactUrgenceTel2: string | null;
+  maladieParticuliere: string | null;
 }
 
 // Résumé affiché sur la fiche employé (écran Employés) — congés/absences de l'année en cours
@@ -66,4 +75,15 @@ export interface CreationEmploye {
   dateEmbauche: string;
   categorieProfessionnelle?: string;
   soumisPointage?: boolean;
+  situationMatrimoniale?: string;
+  groupeSanguin?: string;
+  contactUrgenceNom?: string;
+  contactUrgenceLien?: string;
+  contactUrgenceTel?: string;
+  contactUrgenceTel2?: string;
+  maladieParticuliere?: string;
 }
+
+// Édition d'une fiche existante — tous les champs de création redeviennent optionnels
+// (mise à jour partielle) ; employeId/matricule restent modifiables (correction d'erreur de saisie).
+export type ModificationEmploye = Partial<CreationEmploye>;

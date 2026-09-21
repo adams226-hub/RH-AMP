@@ -30,6 +30,7 @@ export interface DemandeAbsenceAvecEmploye extends DemandeAbsence {
   employePrenoms: string;
   employeMatricule: string;
   filialeId: string;
+  chantierId: string | null;
 }
 
 export interface SoldePermissionExceptionnelle {

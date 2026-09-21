@@ -1,6 +1,40 @@
 import { pool } from '../../config/db';
 import { ErreurApplicative } from '../../middleware/gestionErreurs';
-import { CreationEmploye, Employe, ResumeRhEmploye, StatutEmploye } from './employes.types';
+import { CreationEmploye, Employe, ModificationEmploye, ResumeRhEmploye, StatutEmploye } from './employes.types';
+
+// Correspondance champ (camelCase, API) -> colonne (snake_case, base) pour la mise à jour
+// partielle de modifierEmploye — seuls les champs présents dans le corps de la requête sont
+// écrits, les autres restent inchangés (contrairement à creerEmploye qui écrit une ligne complète).
+const COLONNES_MODIFIABLES: Record<keyof ModificationEmploye, string> = {
+  matricule: 'matricule',
+  nom: 'nom',
+  prenoms: 'prenoms',
+  dateNaissance: 'date_naissance',
+  sexe: 'sexe',
+  nationalite: 'nationalite',
+  telephone: 'telephone',
+  numCnib: 'num_cnib',
+  numCnss: 'num_cnss',
+  rib: 'rib',
+  banque: 'banque',
+  modePaiement: 'mode_paiement',
+  personnesACharge: 'personnes_a_charge',
+  filialeId: 'filiale_id',
+  departementId: 'departement_id',
+  serviceId: 'service_id',
+  fonctionId: 'fonction_id',
+  chantierId: 'chantier_id',
+  dateEmbauche: 'date_embauche',
+  categorieProfessionnelle: 'categorie_professionnelle',
+  soumisPointage: 'soumis_pointage',
+  situationMatrimoniale: 'situation_matrimoniale',
+  groupeSanguin: 'groupe_sanguin',
+  contactUrgenceNom: 'contact_urgence_nom',
+  contactUrgenceLien: 'contact_urgence_lien',
+  contactUrgenceTel: 'contact_urgence_tel',
+  contactUrgenceTel2: 'contact_urgence_tel2',
+  maladieParticuliere: 'maladie_particuliere',
+};
 
 function mapLigne(ligne: Record<string, unknown>): Employe {
   return {
@@ -26,8 +60,17 @@ function mapLigne(ligne: Record<string, unknown>): Employe {
     chantierId: ligne.chantier_id as string | null,
     dateEmbauche: ligne.date_embauche as string,
     statut: ligne.statut as Employe['statut'],
+    dateSortie: ligne.date_sortie as string | null,
+    motifSortie: ligne.motif_sortie as string | null,
     categorieProfessionnelle: ligne.categorie_professionnelle as Employe['categorieProfessionnelle'],
     soumisPointage: ligne.soumis_pointage as boolean,
+    situationMatrimoniale: ligne.situation_matrimoniale as string | null,
+    groupeSanguin: ligne.groupe_sanguin as string | null,
+    contactUrgenceNom: ligne.contact_urgence_nom as string | null,
+    contactUrgenceLien: ligne.contact_urgence_lien as string | null,
+    contactUrgenceTel: ligne.contact_urgence_tel as string | null,
+    contactUrgenceTel2: ligne.contact_urgence_tel2 as string | null,
+    maladieParticuliere: ligne.maladie_particuliere as string | null,
   };
 }
 
@@ -135,9 +178,10 @@ export async function creerEmploye(donnees: CreationEmploye): Promise<Employe> {
        matricule, nom, prenoms, date_naissance, sexe, nationalite, telephone, num_cnib, num_cnss,
        rib, banque, mode_paiement, personnes_a_charge,
        filiale_id, departement_id, service_id, fonction_id, chantier_id, date_embauche, categorie_professionnelle,
-       soumis_pointage
+       soumis_pointage, situation_matrimoniale, groupe_sanguin,
+       contact_urgence_nom, contact_urgence_lien, contact_urgence_tel, contact_urgence_tel2, maladie_particuliere
      )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
      RETURNING *`,
     [
       donnees.matricule,
@@ -161,6 +205,13 @@ export async function creerEmploye(donnees: CreationEmploye): Promise<Employe> {
       donnees.dateEmbauche,
       donnees.categorieProfessionnelle ?? null,
       donnees.soumisPointage ?? false,
+      donnees.situationMatrimoniale ?? null,
+      donnees.groupeSanguin ?? null,
+      donnees.contactUrgenceNom ?? null,
+      donnees.contactUrgenceLien ?? null,
+      donnees.contactUrgenceTel ?? null,
+      donnees.contactUrgenceTel2 ?? null,
+      donnees.maladieParticuliere ?? null,
     ]
   );
 
@@ -197,11 +248,55 @@ export async function definirSoumisPointage(id: string, soumisPointage: boolean)
   return mapLigne(rows[0]);
 }
 
-export async function changerStatutEmploye(id: string, statut: StatutEmploye): Promise<Employe> {
-  const { rows } = await pool.query('UPDATE employes SET statut = $2, updated_at = now() WHERE id = $1 RETURNING *', [
-    id,
-    statut,
-  ]);
+export async function modifierEmploye(id: string, donnees: ModificationEmploye): Promise<Employe> {
+  if (donnees.categorieProfessionnelle) {
+    await verifierCategorieProfessionnelle(donnees.categorieProfessionnelle);
+  }
+
+  const entrees = (Object.entries(donnees) as [keyof ModificationEmploye, unknown][]).filter(
+    ([, valeur]) => valeur !== undefined
+  );
+
+  if (entrees.length === 0) {
+    const actuel = await obtenirEmploye(id);
+    if (!actuel) throw new ErreurApplicative(404, 'Employé introuvable');
+    return actuel;
+  }
+
+  const clauses: string[] = [];
+  const valeurs: unknown[] = [];
+  for (const [cle, valeur] of entrees) {
+    valeurs.push(valeur);
+    clauses.push(`${COLONNES_MODIFIABLES[cle]} = $${valeurs.length}`);
+  }
+  valeurs.push(id);
+
+  const { rows } = await pool.query(
+    `UPDATE employes SET ${clauses.join(', ')}, updated_at = now() WHERE id = $${valeurs.length} RETURNING *`,
+    valeurs
+  );
+
+  if (!rows[0]) {
+    throw new ErreurApplicative(404, 'Employé introuvable');
+  }
+
+  return mapLigne(rows[0]);
+}
+
+// dateSortie/motifSortie : renseignés uniquement pour statut='sorti' (contrôlé côté contrôleur) —
+// remis à null pour tout autre statut (ex. réactivation après une sortie saisie par erreur), pour
+// ne jamais laisser une date de sortie orpheline sur un employé redevenu actif/suspendu.
+export async function changerStatutEmploye(
+  id: string,
+  statut: StatutEmploye,
+  dateSortie?: string,
+  motifSortie?: string
+): Promise<Employe> {
+  const { rows } = await pool.query(
+    `UPDATE employes SET statut = $2, date_sortie = $3, motif_sortie = $4, updated_at = now()
+     WHERE id = $1 RETURNING *`,
+    [id, statut, statut === 'sorti' ? (dateSortie ?? null) : null, statut === 'sorti' ? (motifSortie ?? null) : null]
+  );
 
   if (!rows[0]) {
     throw new ErreurApplicative(404, 'Employé introuvable');

@@ -35,7 +35,7 @@ export function Connexion() {
             AH
           </div>
           <div className="text-center">
-            <h1 className="text-xl font-semibold text-slate-900">SIRH AMP Holding</h1>
+            <h1 className="text-xl font-semibold text-slate-900">RH AMP Holding</h1>
             <p className="text-sm text-slate-500">Connectez-vous à votre espace</p>
           </div>
         </div>

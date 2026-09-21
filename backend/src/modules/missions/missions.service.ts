@@ -24,11 +24,14 @@ function mapMission(l: Record<string, unknown>): Mission {
   return {
     id: l.id as string,
     employeId: l.employe_id as string,
+    numeroOrdreMission: (l.numero_ordre_mission as string | null) ?? null,
     destination: l.destination as string,
     motif: l.motif as string,
     dateDepart,
     dateRetourPrevue,
     dateRetourReelle,
+    montantHebergement: Number(l.montant_hebergement),
+    montantRestauration: Number(l.montant_restauration),
     statut: calculerStatut(dateDepart, dateRetourPrevue, dateRetourReelle),
   };
 }
@@ -72,10 +75,22 @@ export async function listerMissions(
 
 export async function creerMission(donnees: CreationMission): Promise<Mission> {
   const { rows } = await pool.query(
-    `INSERT INTO missions (employe_id, destination, motif, date_depart, date_retour_prevue)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO missions (
+       employe_id, numero_ordre_mission, destination, motif, date_depart, date_retour_prevue,
+       montant_hebergement, montant_restauration
+     )
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING *`,
-    [donnees.employeId, donnees.destination, donnees.motif, donnees.dateDepart, donnees.dateRetourPrevue]
+    [
+      donnees.employeId,
+      donnees.numeroOrdreMission,
+      donnees.destination,
+      donnees.motif,
+      donnees.dateDepart,
+      donnees.dateRetourPrevue,
+      donnees.montantHebergement ?? 0,
+      donnees.montantRestauration ?? 0,
+    ]
   );
 
   return mapMission(rows[0]);

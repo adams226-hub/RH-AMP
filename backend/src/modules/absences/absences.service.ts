@@ -6,7 +6,9 @@ import {
   CreationDemandeAbsence,
   DemandeAbsence,
   DemandeAbsenceAvecEmploye,
+  ModificationDemandeAbsence,
   SoldePermissionExceptionnelle,
+  TypeDemandeAbsence,
 } from './absences.types';
 
 // Barème des permissions exceptionnelles — Note de service N°RH 013/DAF/2026 du 03/08/2026.
@@ -141,7 +143,8 @@ export async function listerToutesDemandes(
   const clauseWhere = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
   const { rows } = await pool.query(
-    `SELECT d.*, e.nom AS employe_nom, e.prenoms AS employe_prenoms, e.matricule AS employe_matricule, e.filiale_id
+    `SELECT d.*, e.nom AS employe_nom, e.prenoms AS employe_prenoms, e.matricule AS employe_matricule,
+            e.filiale_id, e.chantier_id
      FROM demandes_absences d
      JOIN employes e ON e.id = d.employe_id
      ${clauseWhere}
@@ -155,7 +158,76 @@ export async function listerToutesDemandes(
     employePrenoms: l.employe_prenoms as string,
     employeMatricule: l.employe_matricule as string,
     filialeId: l.filiale_id as string,
+    chantierId: l.chantier_id as string | null,
   }));
+}
+
+// Calcul partagé création/modification : découpe barème vs hors-barème et applique les règles de
+// la note de service (ancienneté, quota annuel). Sans effet de bord sur les soldes tant que la
+// demande n'est pas validée par la RH (cf. traiterDecisionRh).
+async function calculerRepartitionJours(
+  client: PoolClient,
+  employeId: string,
+  type: TypeDemandeAbsence,
+  motifBaremeCle: string | undefined,
+  dateDebut: string,
+  dateFin: string
+): Promise<{ nbJours: number; nbJoursBareme: number; nbJoursHorsBareme: number; motifBareme: string | null }> {
+  const nbJours = calculerNbJoursCalendaires(dateDebut, dateFin);
+  const annee = new Date(dateDebut).getFullYear();
+
+  let nbJoursBareme = 0;
+  let nbJoursHorsBareme = nbJours;
+  let motifBareme: string | null = null;
+
+  if (type === 'permission_exceptionnelle') {
+    // 'autre' : motif hors barème officiel (note de service), choisi quand aucun événement listé
+    // ne correspond — aucun jour non déductible d'office (jours: 0), l'intégralité part en
+    // hors-barème et sera classée par la RH à la décision, comme n'importe quel excédent.
+    const evenement =
+      motifBaremeCle === 'autre'
+        ? { cle: 'autre', jours: 0 }
+        : BAREME_PERMISSIONS_EXCEPTIONNELLES.find((e) => e.cle === motifBaremeCle);
+    if (!evenement) {
+      throw new ErreurApplicative(400, "motifBareme invalide pour une permission exceptionnelle");
+    }
+    motifBareme = evenement.cle;
+
+    const { rows: employeRows } = await client.query('SELECT date_embauche FROM employes WHERE id = $1', [
+      employeId,
+    ]);
+    if (!employeRows[0]) {
+      throw new ErreurApplicative(404, 'Employé introuvable');
+    }
+
+    const dateEmbauche = new Date(employeRows[0].date_embauche as Date);
+    const dateMinimale = new Date(dateEmbauche);
+    dateMinimale.setMonth(dateMinimale.getMonth() + ANCIENNETE_MINIMALE_MOIS);
+    if (new Date(dateDebut) < dateMinimale) {
+      throw new ErreurApplicative(
+        400,
+        `Ancienneté insuffisante : ${ANCIENNETE_MINIMALE_MOIS} mois minimum requis pour une permission exceptionnelle`
+      );
+    }
+
+    nbJoursBareme = Math.min(nbJours, evenement.jours);
+    nbJoursHorsBareme = Math.max(0, nbJours - evenement.jours);
+
+    // Décision produit : si le quota annuel de 20 j de permissions exceptionnelles est
+    // insuffisant pour couvrir même la portion barème de cet événement, la demande n'est plus
+    // bloquée — le manquant bascule en "hors barème" (même traitement que l'excédent au-delà de
+    // la durée normale de l'événement) : la RH décide alors, à la validation, s'il est déductible
+    // des congés ou sans solde (cf. traiterDecisionRh), au lieu de rejeter la demande d'office.
+    const solde = await obtenirOuCreerSoldePermission(client, employeId, annee);
+    const soldeRestant = Math.max(0, solde.soldeDisponible);
+    if (nbJoursBareme > soldeRestant) {
+      const manque = nbJoursBareme - soldeRestant;
+      nbJoursBareme = soldeRestant;
+      nbJoursHorsBareme += manque;
+    }
+  }
+
+  return { nbJours, nbJoursBareme, nbJoursHorsBareme, motifBareme };
 }
 
 export async function creerDemande(donnees: CreationDemandeAbsence): Promise<DemandeAbsence> {
@@ -164,48 +236,14 @@ export async function creerDemande(donnees: CreationDemandeAbsence): Promise<Dem
   try {
     await client.query('BEGIN');
 
-    const nbJours = calculerNbJoursCalendaires(donnees.dateDebut, donnees.dateFin);
-    const annee = new Date(donnees.dateDebut).getFullYear();
-
-    let nbJoursBareme = 0;
-    let nbJoursHorsBareme = nbJours;
-    let motifBareme: string | null = null;
-
-    if (donnees.type === 'permission_exceptionnelle') {
-      const evenement = BAREME_PERMISSIONS_EXCEPTIONNELLES.find((e) => e.cle === donnees.motifBareme);
-      if (!evenement) {
-        throw new ErreurApplicative(400, "motifBareme invalide pour une permission exceptionnelle");
-      }
-      motifBareme = evenement.cle;
-
-      const { rows: employeRows } = await client.query('SELECT date_embauche FROM employes WHERE id = $1', [
-        donnees.employeId,
-      ]);
-      if (!employeRows[0]) {
-        throw new ErreurApplicative(404, 'Employé introuvable');
-      }
-
-      const dateEmbauche = new Date(employeRows[0].date_embauche as Date);
-      const dateMinimale = new Date(dateEmbauche);
-      dateMinimale.setMonth(dateMinimale.getMonth() + ANCIENNETE_MINIMALE_MOIS);
-      if (new Date(donnees.dateDebut) < dateMinimale) {
-        throw new ErreurApplicative(
-          400,
-          `Ancienneté insuffisante : ${ANCIENNETE_MINIMALE_MOIS} mois minimum requis pour une permission exceptionnelle`
-        );
-      }
-
-      nbJoursBareme = Math.min(nbJours, evenement.jours);
-      nbJoursHorsBareme = Math.max(0, nbJours - evenement.jours);
-
-      const solde = await obtenirOuCreerSoldePermission(client, donnees.employeId, annee);
-      if (nbJoursBareme > solde.soldeDisponible) {
-        throw new ErreurApplicative(
-          400,
-          `Solde de permissions exceptionnelles insuffisant : ${nbJoursBareme} jours demandés pour ${solde.soldeDisponible} jours disponibles cette année`
-        );
-      }
-    }
+    const { nbJours, nbJoursBareme, nbJoursHorsBareme, motifBareme } = await calculerRepartitionJours(
+      client,
+      donnees.employeId,
+      donnees.type,
+      donnees.motifBareme,
+      donnees.dateDebut,
+      donnees.dateFin
+    );
 
     // Snapshot des noms département/service/fonction au moment du dépôt (même principe que
     // bulletins_paie.fonction_intitule) — la fiche PDF affichait ces noms en direct, donc un
@@ -231,7 +269,7 @@ export async function creerDemande(donnees: CreationDemandeAbsence): Promise<Dem
         donnees.employeId,
         donnees.type,
         motifBareme,
-        donnees.motif,
+        donnees.motif ?? '',
         donnees.dateDebut,
         donnees.dateFin,
         nbJours,
@@ -242,6 +280,64 @@ export async function creerDemande(donnees: CreationDemandeAbsence): Promise<Dem
         contexte.service_nom,
         contexte.fonction_intitule,
       ]
+    );
+
+    await client.query('COMMIT');
+    return mapDemande(rows[0]);
+  } catch (erreur) {
+    await client.query('ROLLBACK');
+    throw erreur;
+  } finally {
+    client.release();
+  }
+}
+
+// Modification réservée aux demandes encore 'soumise' — dès l'avis hiérarchique donné, la fiche
+// est engagée dans le circuit de validation et ne doit plus bouger sous le nez de l'approbateur.
+export async function modifierDemande(id: string, donnees: ModificationDemandeAbsence): Promise<DemandeAbsence> {
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const { rows: existantes } = await client.query('SELECT * FROM demandes_absences WHERE id = $1 FOR UPDATE', [
+      id,
+    ]);
+    const existante = existantes[0] ? mapDemande(existantes[0]) : null;
+
+    if (!existante) {
+      throw new ErreurApplicative(404, 'Demande introuvable');
+    }
+    if (existante.statut !== 'soumise') {
+      throw new ErreurApplicative(
+        409,
+        "Seule une demande pas encore traitée par le supérieur hiérarchique peut être modifiée"
+      );
+    }
+
+    const type = donnees.type ?? existante.type;
+    const dateDebut = donnees.dateDebut ?? existante.dateDebut;
+    const dateFin = donnees.dateFin ?? existante.dateFin;
+    const motif = donnees.motif ?? existante.motif;
+    const motifBaremeCle =
+      type === 'permission_exceptionnelle' ? donnees.motifBareme ?? existante.motifBareme ?? undefined : undefined;
+    const justificatifFourni = donnees.justificatifFourni ?? existante.justificatifFourni;
+
+    const { nbJours, nbJoursBareme, nbJoursHorsBareme, motifBareme } = await calculerRepartitionJours(
+      client,
+      existante.employeId,
+      type,
+      motifBaremeCle,
+      dateDebut,
+      dateFin
+    );
+
+    const { rows } = await client.query(
+      `UPDATE demandes_absences
+       SET type = $2, motif_bareme = $3, motif = $4, date_debut = $5, date_fin = $6,
+           nb_jours = $7, nb_jours_bareme = $8, nb_jours_hors_bareme = $9, justificatif_fourni = $10, updated_at = now()
+       WHERE id = $1 RETURNING *`,
+      [id, type, motifBareme, motif, dateDebut, dateFin, nbJours, nbJoursBareme, nbJoursHorsBareme, justificatifFourni]
     );
 
     await client.query('COMMIT');

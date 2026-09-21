@@ -9,6 +9,8 @@ import {
   demandesCreer,
   demandesDecision,
   demandesListe,
+  demandesModifier,
+  exportExcel,
   soldePermission,
 } from './absences.controller';
 
@@ -19,7 +21,9 @@ routesAbsences.use(authentification);
 routesAbsences.get('/bareme', asyncHandler(bareme));
 routesAbsences.get('/solde-permission', asyncHandler(soldePermission));
 routesAbsences.get('/demandes', asyncHandler(demandesListe));
+routesAbsences.get('/export-excel', asyncHandler(exportExcel));
 routesAbsences.post('/demandes', asyncHandler(demandesCreer));
+routesAbsences.put('/demandes/:id', asyncHandler(demandesModifier));
 routesAbsences.get('/demandes/:id/fiche', asyncHandler(demandeFiche));
 routesAbsences.post(
   '/demandes/:id/avis',

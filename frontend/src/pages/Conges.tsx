@@ -12,6 +12,13 @@ import { SelecteurEmploye } from '../components/SelecteurEmploye';
 import { useAuth } from '../context/AuthContext';
 import { useTri } from '../hooks/useTri';
 import { DemandeConge, DemandeCongeAvecEmploye, SoldeConge, StatutDemandeConge } from '../types/conges';
+import {
+  DemandeCongeSpecial,
+  DemandeCongeSpecialAvecEmploye,
+  StatutCongeSpecial,
+  TypeCongeSpecial,
+} from '../types/congesSpeciaux';
+import { Modale } from '../components/Modale';
 import { formaterDateFr } from '../utils/date';
 
 const CHAMP =
@@ -41,6 +48,23 @@ const COULEURS_STATUT: Record<StatutDemandeConge, CouleurBadge> = {
   annulee: 'slate',
 };
 
+const LIBELLES_TYPE_SPECIAL: Record<TypeCongeSpecial, string> = {
+  maternite: 'Congé maternité',
+  paternite: 'Congé paternité',
+};
+
+const LIBELLES_STATUT_SPECIAL: Record<StatutCongeSpecial, string> = {
+  soumise: 'Soumise',
+  validee: 'Validée',
+  rejetee: 'Rejetée',
+};
+
+const COULEURS_STATUT_SPECIAL: Record<StatutCongeSpecial, CouleurBadge> = {
+  soumise: 'primary',
+  validee: 'succes',
+  rejetee: 'erreur',
+};
+
 function TuileSolde({ libelle, valeur }: { libelle: string; valeur: number }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -63,6 +87,7 @@ export function Conges() {
 // ---------- Vue Employé : uniquement ses propres congés ----------
 
 function VueEmploye({ jeton, employeId }: { jeton: string | null; employeId: string | null }) {
+  const [onglet, setOnglet] = useState<'annuel' | 'special'>('annuel');
   const [solde, setSolde] = useState<SoldeConge | null>(null);
   const [demandes, setDemandes] = useState<DemandeConge[]>([]);
   const [erreur, setErreur] = useState<string | null>(null);
@@ -117,66 +142,198 @@ function VueEmploye({ jeton, employeId }: { jeton: string | null; employeId: str
     <MiseEnPage>
       <h2 className="mb-4 text-lg font-semibold text-slate-900">Mes congés</h2>
 
+      <div className="mb-6 flex gap-1 border-b border-slate-200">
+        {(
+          [
+            ['annuel', 'Congé annuel'],
+            ['special', 'Maternité / Paternité'],
+          ] as const
+        ).map(([id, libelle]) => (
+          <button
+            key={id}
+            onClick={() => setOnglet(id)}
+            className={`border-b-2 px-4 py-2.5 text-sm font-medium transition-colors duration-200 ${
+              onglet === id ? 'border-primary-600 text-primary-700' : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            {libelle}
+          </button>
+        ))}
+      </div>
+
       {erreur && <div className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{erreur}</div>}
 
-      {solde && (
-        <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <TuileSolde libelle="Solde disponible" valeur={solde.soldeDisponible} />
-          <TuileSolde libelle="Jours acquis" valeur={solde.joursAcquis} />
-          <TuileSolde libelle="Jours consommés" valeur={solde.joursConsommes} />
-          <TuileSolde libelle="Reporté N-1" valeur={solde.soldeInitial} />
-        </div>
+      {onglet === 'annuel' && (
+        <>
+          {solde && (
+            <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <TuileSolde libelle="Solde disponible" valeur={solde.soldeDisponible} />
+              <TuileSolde libelle="Jours acquis" valeur={solde.joursAcquis} />
+              <TuileSolde libelle="Jours consommés" valeur={solde.joursConsommes} />
+              <TuileSolde libelle="Reporté N-1" valeur={solde.soldeInitial} />
+            </div>
+          )}
+
+          <div className="mb-6 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            {demandes.length > 0 ? (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+                    <th className="px-4 py-3">Début</th>
+                    <th className="px-4 py-3">Fin</th>
+                    <th className="px-4 py-3">Jours</th>
+                    <th className="px-4 py-3">Motif</th>
+                    <th className="px-4 py-3">Statut</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {demandes.map((d) => (
+                    <tr key={d.id} className="transition-colors duration-200 hover:bg-slate-50">
+                      <td className="px-4 py-3">{formaterDateFr(d.dateDebut)}</td>
+                      <td className="px-4 py-3">{formaterDateFr(d.dateFin)}</td>
+                      <td className="px-4 py-3">{d.nbJours}</td>
+                      <td className="px-4 py-3 text-slate-500">{d.motif ?? '—'}</td>
+                      <td className="px-4 py-3">
+                        <Badge couleur={COULEURS_STATUT[d.statut]}>{LIBELLES_STATUT[d.statut]}</Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <EtatVide icone={<IconeConges />} titre="Aucune demande" message="Vos demandes de congé apparaîtront ici." />
+            )}
+          </div>
+
+          <form onSubmit={creer} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h3 className="mb-3 text-sm font-semibold text-slate-800">Nouvelle demande</h3>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <input type="date" value={dateDebut} onChange={(e) => setDateDebut(e.target.value)} required className={CHAMP} />
+              <input type="date" value={dateFin} onChange={(e) => setDateFin(e.target.value)} required className={CHAMP} />
+              <input value={motif} onChange={(e) => setMotif(e.target.value)} placeholder="Motif (optionnel)" className={CHAMP} />
+            </div>
+            <button disabled={envoiEnCours} className={`${BOUTON} mt-3`}>
+              {envoiEnCours ? 'Envoi...' : 'Soumettre la demande'}
+            </button>
+          </form>
+        </>
       )}
+
+      {onglet === 'special' && <SectionCongesSpeciauxEmploye jeton={jeton} employeId={employeId} />}
+    </MiseEnPage>
+  );
+}
+
+// ---------- Congés spéciaux (maternité / paternité) — vue employé ----------
+
+function SectionCongesSpeciauxEmploye({ jeton, employeId }: { jeton: string | null; employeId: string }) {
+  const [demandes, setDemandes] = useState<DemandeCongeSpecial[]>([]);
+  const [erreur, setErreur] = useState<string | null>(null);
+  const [type, setType] = useState<TypeCongeSpecial>('maternite');
+  const [dateDebut, setDateDebut] = useState('');
+  const [justificatifFourni, setJustificatifFourni] = useState(false);
+  const [motif, setMotif] = useState('');
+  const [envoiEnCours, setEnvoiEnCours] = useState(false);
+
+  function rafraichir() {
+    if (!jeton || !employeId) return;
+    api
+      .listerDemandesCongesSpeciaux(jeton, employeId)
+      .then(setDemandes)
+      .catch((e) => setErreur(e instanceof ErreurApi ? e.message : 'Erreur de chargement'));
+  }
+
+  useEffect(rafraichir, [jeton, employeId]);
+
+  async function creer(evenement: FormEvent) {
+    evenement.preventDefault();
+    if (!jeton || !employeId || !dateDebut) return;
+    setEnvoiEnCours(true);
+    try {
+      await api.creerDemandeCongeSpecial(jeton, { employeId, type, dateDebut, justificatifFourni, motif: motif || undefined });
+      setDateDebut('');
+      setJustificatifFourni(false);
+      setMotif('');
+      rafraichir();
+    } catch (e) {
+      setErreur(e instanceof ErreurApi ? e.message : 'Erreur lors de la création');
+    } finally {
+      setEnvoiEnCours(false);
+    }
+  }
+
+  return (
+    <>
+      {erreur && <div className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{erreur}</div>}
 
       <div className="mb-6 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         {demandes.length > 0 ? (
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+                <th className="px-4 py-3">Type</th>
                 <th className="px-4 py-3">Début</th>
                 <th className="px-4 py-3">Fin</th>
-                <th className="px-4 py-3">Jours</th>
-                <th className="px-4 py-3">Motif</th>
                 <th className="px-4 py-3">Statut</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {demandes.map((d) => (
                 <tr key={d.id} className="transition-colors duration-200 hover:bg-slate-50">
+                  <td className="px-4 py-3">{LIBELLES_TYPE_SPECIAL[d.type]}</td>
                   <td className="px-4 py-3">{formaterDateFr(d.dateDebut)}</td>
                   <td className="px-4 py-3">{formaterDateFr(d.dateFin)}</td>
-                  <td className="px-4 py-3">{d.nbJours}</td>
-                  <td className="px-4 py-3 text-slate-500">{d.motif ?? '—'}</td>
                   <td className="px-4 py-3">
-                    <Badge couleur={COULEURS_STATUT[d.statut]}>{LIBELLES_STATUT[d.statut]}</Badge>
+                    <Badge couleur={COULEURS_STATUT_SPECIAL[d.statut]}>{LIBELLES_STATUT_SPECIAL[d.statut]}</Badge>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         ) : (
-          <EtatVide icone={<IconeConges />} titre="Aucune demande" message="Vos demandes de congé apparaîtront ici." />
+          <EtatVide
+            icone={<IconeConges />}
+            titre="Aucune demande"
+            message="Vos demandes de congé maternité/paternité apparaîtront ici."
+          />
         )}
       </div>
 
       <form onSubmit={creer} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <h3 className="mb-3 text-sm font-semibold text-slate-800">Nouvelle demande</h3>
+        <p className="mb-3 text-xs text-slate-400">
+          Ne débite jamais le solde de congé annuel. Durée par défaut : 105 jours (≈ 3 mois 3 semaines) pour la
+          maternité, 3 jours pour la paternité — ajustable par la RH à la validation.
+        </p>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <select value={type} onChange={(e) => setType(e.target.value as TypeCongeSpecial)} className={CHAMP}>
+            <option value="maternite">Congé maternité</option>
+            <option value="paternite">Congé paternité</option>
+          </select>
           <input type="date" value={dateDebut} onChange={(e) => setDateDebut(e.target.value)} required className={CHAMP} />
-          <input type="date" value={dateFin} onChange={(e) => setDateFin(e.target.value)} required className={CHAMP} />
           <input value={motif} onChange={(e) => setMotif(e.target.value)} placeholder="Motif (optionnel)" className={CHAMP} />
         </div>
+        <label className="mt-3 flex items-center gap-2 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            checked={justificatifFourni}
+            onChange={(e) => setJustificatifFourni(e.target.checked)}
+            className="h-4 w-4 rounded border-slate-300 text-primary-700 focus:ring-primary-100"
+          />
+          Justificatif fourni (certificat médical, acte de naissance…)
+        </label>
         <button disabled={envoiEnCours} className={`${BOUTON} mt-3`}>
           {envoiEnCours ? 'Envoi...' : 'Soumettre la demande'}
         </button>
       </form>
-    </MiseEnPage>
+    </>
   );
 }
 
 // ---------- Vue Gestion : Chef de service / RH Filiale / DRH / Super Admin ----------
 
 function VueGestion({ jeton, role }: { jeton: string | null; role: string | null }) {
+  const [onglet, setOnglet] = useState<'annuel' | 'special'>('annuel');
   const peutDonnerAvis = role === 'chef_service' || role === 'super_admin';
   const peutDecider = role === 'rh_filiale' || role === 'drh_holding' || role === 'super_admin';
   const peutCreer = role !== null && ROLES_CREATION.includes(role);
@@ -289,14 +446,35 @@ function VueGestion({ jeton, role }: { jeton: string | null; role: string | null
           <h2 className="text-lg font-semibold text-slate-900">Congés</h2>
           <p className="text-sm text-slate-500">{demandes.length} demande(s) dans votre périmètre</p>
         </div>
-        {peutCreer && (
+        {peutCreer && onglet === 'annuel' && (
           <button onClick={() => setFormulaireOuvert((v) => !v)} className={BOUTON}>
             {formulaireOuvert ? 'Fermer' : '+ Nouvelle demande'}
           </button>
         )}
       </div>
 
-      {(peutDonnerAvis || peutDecider) && nbATraiter > 0 && (
+      <div className="mb-6 flex gap-1 border-b border-slate-200">
+        {(
+          [
+            ['annuel', 'Congé annuel'],
+            ['special', 'Maternité / Paternité'],
+          ] as const
+        ).map(([id, libelle]) => (
+          <button
+            key={id}
+            onClick={() => setOnglet(id)}
+            className={`border-b-2 px-4 py-2.5 text-sm font-medium transition-colors duration-200 ${
+              onglet === id ? 'border-primary-600 text-primary-700' : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            {libelle}
+          </button>
+        ))}
+      </div>
+
+      {onglet === 'special' && <SectionCongesSpeciauxGestion jeton={jeton} peutDecider={peutDecider} peutCreer={peutCreer} />}
+
+      {onglet === 'annuel' && (peutDonnerAvis || peutDecider) && nbATraiter > 0 && (
         <button
           onClick={() => setSeulementATraiter((v) => !v)}
           className={`mb-6 flex w-full items-start gap-3 rounded-2xl border px-4 py-3 text-left transition-colors duration-200 ${
@@ -311,6 +489,8 @@ function VueGestion({ jeton, role }: { jeton: string | null; role: string | null
         </button>
       )}
 
+      {onglet === 'annuel' && (
+        <>
       {erreur && <div className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{erreur}</div>}
 
       {formulaireOuvert && peutCreer && (
@@ -436,6 +616,231 @@ function VueGestion({ jeton, role }: { jeton: string | null; role: string | null
           />
         )}
       </div>
+        </>
+      )}
     </MiseEnPage>
+  );
+}
+
+// ---------- Congés spéciaux (maternité / paternité) — vue gestion (RH) ----------
+
+function SectionCongesSpeciauxGestion({
+  jeton,
+  peutDecider,
+  peutCreer,
+}: {
+  jeton: string | null;
+  peutDecider: boolean;
+  peutCreer: boolean;
+}) {
+  const [demandes, setDemandes] = useState<DemandeCongeSpecialAvecEmploye[]>([]);
+  const [erreur, setErreur] = useState<string | null>(null);
+  const [chargement, setChargement] = useState(true);
+
+  const [formulaireOuvert, setFormulaireOuvert] = useState(false);
+  const [employeId, setEmployeId] = useState('');
+  const [type, setType] = useState<TypeCongeSpecial>('maternite');
+  const [dateDebut, setDateDebut] = useState('');
+  const [justificatifFourni, setJustificatifFourni] = useState(false);
+  const [motif, setMotif] = useState('');
+  const [envoiEnCours, setEnvoiEnCours] = useState(false);
+
+  const [demandeATraiter, setDemandeATraiter] = useState<DemandeCongeSpecialAvecEmploye | null>(null);
+  const [dateFinTraitement, setDateFinTraitement] = useState('');
+  const [commentaireTraitement, setCommentaireTraitement] = useState('');
+  const [traitementEnCours, setTraitementEnCours] = useState(false);
+
+  function rafraichir() {
+    if (!jeton) return;
+    setChargement(true);
+    api
+      .listerToutesDemandesCongesSpeciaux(jeton)
+      .then(setDemandes)
+      .catch((e) => setErreur(e instanceof ErreurApi ? e.message : 'Erreur de chargement'))
+      .finally(() => setChargement(false));
+  }
+
+  useEffect(rafraichir, [jeton]);
+
+  async function creer(evenement: FormEvent) {
+    evenement.preventDefault();
+    if (!jeton || !employeId || !dateDebut) return;
+    setEnvoiEnCours(true);
+    try {
+      await api.creerDemandeCongeSpecial(jeton, { employeId, type, dateDebut, justificatifFourni, motif: motif || undefined });
+      setEmployeId('');
+      setDateDebut('');
+      setJustificatifFourni(false);
+      setMotif('');
+      setFormulaireOuvert(false);
+      rafraichir();
+    } catch (e) {
+      setErreur(e instanceof ErreurApi ? e.message : 'Erreur lors de la création');
+    } finally {
+      setEnvoiEnCours(false);
+    }
+  }
+
+  function ouvrirTraitement(d: DemandeCongeSpecialAvecEmploye) {
+    setDemandeATraiter(d);
+    setDateFinTraitement(d.dateFin);
+    setCommentaireTraitement('');
+  }
+
+  async function traiter(decision: 'validee' | 'rejetee') {
+    if (!jeton || !demandeATraiter) return;
+    setTraitementEnCours(true);
+    try {
+      await api.deciderCongeSpecial(jeton, demandeATraiter.id, decision, dateFinTraitement, commentaireTraitement || undefined);
+      setDemandeATraiter(null);
+      rafraichir();
+    } catch (e) {
+      setErreur(e instanceof ErreurApi ? e.message : 'Erreur lors du traitement');
+    } finally {
+      setTraitementEnCours(false);
+    }
+  }
+
+  return (
+    <>
+      {erreur && <div className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{erreur}</div>}
+
+      {peutCreer && (
+        <div className="mb-6 flex justify-end">
+          <button onClick={() => setFormulaireOuvert((v) => !v)} className={BOUTON}>
+            {formulaireOuvert ? 'Fermer' : '+ Nouvelle demande'}
+          </button>
+        </div>
+      )}
+
+      {formulaireOuvert && peutCreer && (
+        <form onSubmit={creer} className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h3 className="mb-3 text-sm font-semibold text-slate-800">Nouvelle demande</h3>
+          <p className="mb-3 text-xs text-slate-400">
+            Ne débite jamais le solde de congé annuel. Durée par défaut : 105 jours (≈ 3 mois 3 semaines) pour la
+            maternité, 3 jours pour la paternité — ajustable à la validation.
+          </p>
+          <div className="mb-3">
+            <SelecteurEmploye valeur={employeId} onChange={setEmployeId} />
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <select value={type} onChange={(e) => setType(e.target.value as TypeCongeSpecial)} className={CHAMP}>
+              <option value="maternite">Congé maternité</option>
+              <option value="paternite">Congé paternité</option>
+            </select>
+            <input type="date" value={dateDebut} onChange={(e) => setDateDebut(e.target.value)} required className={CHAMP} />
+            <input value={motif} onChange={(e) => setMotif(e.target.value)} placeholder="Motif (optionnel)" className={CHAMP} />
+          </div>
+          <label className="mt-3 flex items-center gap-2 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              checked={justificatifFourni}
+              onChange={(e) => setJustificatifFourni(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 text-primary-700 focus:ring-primary-100"
+            />
+            Justificatif fourni (certificat médical, acte de naissance…)
+          </label>
+          <button disabled={envoiEnCours} className={`${BOUTON} mt-3`}>
+            {envoiEnCours ? 'Envoi...' : 'Soumettre la demande'}
+          </button>
+        </form>
+      )}
+
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        {chargement ? (
+          <div className="space-y-3 p-4">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="h-8 animate-pulse rounded bg-slate-100" />
+            ))}
+          </div>
+        ) : demandes.length > 0 ? (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+                <th className="px-4 py-3">Employé</th>
+                <th className="px-4 py-3">Type</th>
+                <th className="px-4 py-3">Début</th>
+                <th className="px-4 py-3">Fin</th>
+                <th className="px-4 py-3">Statut</th>
+                <th className="px-4 py-3" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {demandes.map((d) => (
+                <tr key={d.id} className="transition-colors duration-200 hover:bg-slate-50">
+                  <td className="px-4 py-3 font-medium text-slate-900">
+                    {d.employeNom} {d.employePrenoms}
+                    <div className="font-mono text-xs font-normal text-slate-400">{d.employeMatricule}</div>
+                  </td>
+                  <td className="px-4 py-3">{LIBELLES_TYPE_SPECIAL[d.type]}</td>
+                  <td className="px-4 py-3">{formaterDateFr(d.dateDebut)}</td>
+                  <td className="px-4 py-3">{formaterDateFr(d.dateFin)}</td>
+                  <td className="px-4 py-3">
+                    <Badge couleur={COULEURS_STATUT_SPECIAL[d.statut]}>{LIBELLES_STATUT_SPECIAL[d.statut]}</Badge>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    {peutDecider && d.statut === 'soumise' && (
+                      <button onClick={() => ouvrirTraitement(d)} className="font-medium text-primary-700 transition-colors duration-200 hover:underline">
+                        Traiter
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <EtatVide
+            icone={<IconeConges />}
+            titre="Aucune demande"
+            message="Les demandes de congé maternité/paternité apparaîtront ici."
+          />
+        )}
+      </div>
+
+      {demandeATraiter && (
+        <Modale
+          titre={`Traiter — ${demandeATraiter.employeNom} ${demandeATraiter.employePrenoms}`}
+          onFermer={() => setDemandeATraiter(null)}
+        >
+          <div className="space-y-3">
+            <p className="text-sm text-slate-600">{LIBELLES_TYPE_SPECIAL[demandeATraiter.type]} — début le {formaterDateFr(demandeATraiter.dateDebut)}</p>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">Date de fin</label>
+              <input
+                type="date"
+                value={dateFinTraitement}
+                onChange={(e) => setDateFinTraitement(e.target.value)}
+                className={`w-full ${CHAMP}`}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">Commentaire (optionnel)</label>
+              <input
+                value={commentaireTraitement}
+                onChange={(e) => setCommentaireTraitement(e.target.value)}
+                className={`w-full ${CHAMP}`}
+              />
+            </div>
+            <div className="flex gap-3">
+              <button
+                disabled={traitementEnCours}
+                onClick={() => traiter('validee')}
+                className={`${BOUTON} disabled:pointer-events-none disabled:opacity-60`}
+              >
+                {traitementEnCours ? 'Envoi...' : 'Valider'}
+              </button>
+              <button
+                disabled={traitementEnCours}
+                onClick={() => traiter('rejetee')}
+                className="rounded-md bg-erreur-600 px-4 py-2 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-erreur-700 hover:shadow-md disabled:pointer-events-none disabled:opacity-60"
+              >
+                Rejeter
+              </button>
+            </div>
+          </div>
+        </Modale>
+      )}
+    </>
   );
 }

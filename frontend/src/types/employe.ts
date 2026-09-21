@@ -23,11 +23,20 @@ export interface Employe {
   chantierId: string | null;
   dateEmbauche: string;
   statut: StatutEmploye;
+  dateSortie: string | null;
+  motifSortie: string | null;
   // Référence categories_professionnelles.code (référentiel géré depuis Paramètres).
   categorieProfessionnelle: string | null;
   // Décision RH indépendante du chantier/contrat — pilote le blocage de paie tant que le
   // pointage du mois n'est pas validé.
   soumisPointage: boolean;
+  situationMatrimoniale: string | null;
+  groupeSanguin: string | null;
+  contactUrgenceNom: string | null;
+  contactUrgenceLien: string | null;
+  contactUrgenceTel: string | null;
+  contactUrgenceTel2: string | null;
+  maladieParticuliere: string | null;
 }
 
 // Résumé RH affiché sur la fiche employé — année en cours, absences validées par la RH

@@ -28,6 +28,7 @@ export interface DemandeAbsenceAvecEmploye extends DemandeAbsence {
   employePrenoms: string;
   employeMatricule: string;
   filialeId: string;
+  chantierId: string | null;
 }
 
 export interface SoldePermissionExceptionnelle {
@@ -42,8 +43,18 @@ export interface CreationDemandeAbsence {
   employeId: string;
   type: TypeDemandeAbsence;
   motifBareme?: string;
-  motif: string;
+  motif?: string;
   dateDebut: string;
   dateFin: string;
+  justificatifFourni?: boolean;
+}
+
+// Modification possible uniquement tant que statut === 'soumise' (avant l'avis hiérarchique).
+export interface ModificationDemandeAbsence {
+  type?: TypeDemandeAbsence;
+  motifBareme?: string;
+  motif?: string;
+  dateDebut?: string;
+  dateFin?: string;
   justificatifFourni?: boolean;
 }

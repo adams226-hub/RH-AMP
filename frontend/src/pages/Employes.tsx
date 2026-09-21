@@ -15,7 +15,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTri } from '../hooks/useTri';
 import { Employe, ResumeRhEmploye, StatutEmploye } from '../types/employe';
 import { Chantier } from '../types/pointage';
-import { Filiale } from '../types/postes';
+import { Filiale, Fonction } from '../types/postes';
 import { CategorieProfessionnelle } from '../types/categoriesProfessionnelles';
 import { formaterDateFr } from '../utils/date';
 
@@ -39,11 +39,22 @@ const ETAT_INITIAL = {
   modePaiement: '',
   personnesACharge: '0',
   filialeId: '',
+  fonctionId: '',
   chantierId: '',
   dateEmbauche: '',
   categorieProfessionnelle: '',
   soumisPointage: false,
+  situationMatrimoniale: '',
+  groupeSanguin: '',
+  contactUrgenceNom: '',
+  contactUrgenceLien: '',
+  contactUrgenceTel: '',
+  contactUrgenceTel2: '',
+  maladieParticuliere: '',
 };
+
+const OPTIONS_SITUATION_MATRIMONIALE = ['Célibataire', 'Marié(e)', 'Divorcé(e)', 'Veuf(ve)'];
+const OPTIONS_GROUPE_SANGUIN = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
 const LIBELLES_STATUT: Record<StatutEmploye, string> = {
   actif: 'Actif',
@@ -65,13 +76,19 @@ export function Employes() {
   const [chantiers, setChantiers] = useState<Chantier[]>([]);
   const [chantierEnCours, setChantierEnCours] = useState(false);
   const [pointageEnCours, setPointageEnCours] = useState(false);
+  const [statutEnCours, setStatutEnCours] = useState(false);
+  const [sortieOuverte, setSortieOuverte] = useState(false);
+  const [dateSortieForm, setDateSortieForm] = useState('');
+  const [motifSortieForm, setMotifSortieForm] = useState('');
   const [categories, setCategories] = useState<CategorieProfessionnelle[]>([]);
+  const [fonctions, setFonctions] = useState<Fonction[]>([]);
   const [erreur, setErreur] = useState<string | null>(null);
   const [chargement, setChargement] = useState(true);
   const [formulaireOuvert, setFormulaireOuvert] = useState(false);
   const [envoiEnCours, setEnvoiEnCours] = useState(false);
   const [nouvelleFiliale, setNouvelleFiliale] = useState('');
   const [champs, setChamps] = useState(ETAT_INITIAL);
+  const [idEnEdition, setIdEnEdition] = useState<string | null>(null);
   const [employeSelectionne, setEmployeSelectionne] = useState<Employe | null>(null);
   const [resumeRh, setResumeRh] = useState<ResumeRhEmploye | null>(null);
 
@@ -113,6 +130,13 @@ export function Employes() {
     api.listerCategoriesProfessionnelles(jeton).then(setCategories);
   }, [jeton]);
 
+  // Liste complète : une fonction archivée doit encore afficher son intitulé sur les fiches
+  // employé qui la référencent déjà — seul le formulaire de création filtre (fonctionsVisibles).
+  useEffect(() => {
+    if (!jeton) return;
+    api.listerFonctions(jeton).then(setFonctions);
+  }, [jeton]);
+
   useEffect(() => {
     if (!jeton || !employeSelectionne) {
       setResumeRh(null);
@@ -122,8 +146,10 @@ export function Employes() {
   }, [jeton, employeSelectionne?.id]);
 
   const categoriesVisibles = useMemo(() => categories.filter((c) => c.actif), [categories]);
+  const fonctionsVisibles = useMemo(() => fonctions.filter((f) => f.actif), [fonctions]);
   const nomChantier = (id: string | null) => chantiers.find((c) => c.id === id)?.nom ?? null;
   const libelleCategorie = (code: string | null) => categories.find((c) => c.code === code)?.libelle ?? null;
+  const nomFonction = (id: string | null) => fonctions.find((f) => f.id === id)?.intitule ?? null;
 
   async function definirChantierEmployeSelectionne(chantierId: string) {
     if (!jeton || !employeSelectionne) return;
@@ -150,6 +176,23 @@ export function Employes() {
       setErreur(e instanceof ErreurApi ? e.message : "Erreur lors de la mise à jour du pointage");
     } finally {
       setPointageEnCours(false);
+    }
+  }
+
+  async function changerStatutEmployeSelectionne(statut: StatutEmploye, dateSortie?: string, motifSortie?: string) {
+    if (!jeton || !employeSelectionne) return;
+    setStatutEnCours(true);
+    try {
+      const employe = await api.changerStatutEmploye(jeton, employeSelectionne.id, statut, dateSortie, motifSortie);
+      setEmployeSelectionne(employe);
+      setSortieOuverte(false);
+      setDateSortieForm('');
+      setMotifSortieForm('');
+      rafraichir();
+    } catch (e) {
+      setErreur(e instanceof ErreurApi ? e.message : 'Erreur lors du changement de statut');
+    } finally {
+      setStatutEnCours(false);
     }
   }
 
@@ -186,7 +229,42 @@ export function Employes() {
     setChamps((precedent) => ({ ...precedent, [cle]: valeur }));
   }
 
-  async function creerEmploye(evenement: FormEvent) {
+  function ouvrirEdition(employe: Employe) {
+    setChamps({
+      matricule: employe.matricule,
+      nom: employe.nom,
+      prenoms: employe.prenoms,
+      dateNaissance: employe.dateNaissance,
+      sexe: employe.sexe,
+      nationalite: employe.nationalite,
+      telephone: employe.telephone,
+      numCnib: employe.numCnib,
+      numCnss: employe.numCnss,
+      rib: employe.rib ?? '',
+      banque: employe.banque ?? '',
+      modePaiement: employe.modePaiement ?? '',
+      personnesACharge: String(employe.personnesACharge),
+      filialeId: employe.filialeId,
+      fonctionId: employe.fonctionId ?? '',
+      chantierId: employe.chantierId ?? '',
+      dateEmbauche: employe.dateEmbauche,
+      categorieProfessionnelle: employe.categorieProfessionnelle ?? '',
+      soumisPointage: employe.soumisPointage,
+      situationMatrimoniale: employe.situationMatrimoniale ?? '',
+      groupeSanguin: employe.groupeSanguin ?? '',
+      contactUrgenceNom: employe.contactUrgenceNom ?? '',
+      contactUrgenceLien: employe.contactUrgenceLien ?? '',
+      contactUrgenceTel: employe.contactUrgenceTel ?? '',
+      contactUrgenceTel2: employe.contactUrgenceTel2 ?? '',
+      maladieParticuliere: employe.maladieParticuliere ?? '',
+    });
+    setNouvelleFiliale('');
+    setIdEnEdition(employe.id);
+    setFormulaireOuvert(true);
+    setEmployeSelectionne(null);
+  }
+
+  async function soumettreFormulaireEmploye(evenement: FormEvent) {
     evenement.preventDefault();
     if (!jeton) return;
 
@@ -201,7 +279,7 @@ export function Employes() {
         rafraichirFiliales();
       }
 
-      await api.creerEmploye(jeton, {
+      const payload = {
         ...champs,
         filialeId,
         rib: champs.rib || undefined,
@@ -209,14 +287,32 @@ export function Employes() {
         modePaiement: champs.modePaiement || undefined,
         personnesACharge: Number(champs.personnesACharge),
         categorieProfessionnelle: champs.categorieProfessionnelle || undefined,
+        fonctionId: champs.fonctionId || undefined,
         chantierId: champs.chantierId || undefined,
-      });
+        situationMatrimoniale: champs.situationMatrimoniale || undefined,
+        groupeSanguin: champs.groupeSanguin || undefined,
+        contactUrgenceNom: champs.contactUrgenceNom || undefined,
+        contactUrgenceLien: champs.contactUrgenceLien || undefined,
+        contactUrgenceTel: champs.contactUrgenceTel || undefined,
+        contactUrgenceTel2: champs.contactUrgenceTel2 || undefined,
+        maladieParticuliere: champs.maladieParticuliere || undefined,
+      };
+
+      if (idEnEdition) {
+        await api.modifierEmploye(jeton, idEnEdition, payload);
+      } else {
+        await api.creerEmploye(jeton, payload);
+      }
+
       setChamps(ETAT_INITIAL);
       setNouvelleFiliale('');
       setFormulaireOuvert(false);
+      setIdEnEdition(null);
       rafraichir();
     } catch (e) {
-      setErreur(e instanceof ErreurApi ? e.message : 'Erreur lors de la création');
+      setErreur(
+        e instanceof ErreurApi ? e.message : idEnEdition ? 'Erreur lors de la modification' : 'Erreur lors de la création'
+      );
     } finally {
       setEnvoiEnCours(false);
     }
@@ -241,7 +337,15 @@ export function Employes() {
         </div>
         {peutGerer && (
           <button
-            onClick={() => setFormulaireOuvert((v) => !v)}
+            onClick={() => {
+              if (formulaireOuvert) {
+                setFormulaireOuvert(false);
+              } else {
+                setChamps(ETAT_INITIAL);
+                setIdEnEdition(null);
+                setFormulaireOuvert(true);
+              }
+            }}
             className="rounded-md bg-primary-700 px-4 py-2 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-800 hover:shadow-md"
           >
             {formulaireOuvert ? 'Fermer' : '+ Nouvel employé'}
@@ -269,8 +373,8 @@ export function Employes() {
       )}
 
       {formulaireOuvert && peutGerer && (
-        <form onSubmit={creerEmploye} className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h3 className="mb-4 text-sm font-semibold text-slate-800">Nouvel employé</h3>
+        <form onSubmit={soumettreFormulaireEmploye} className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h3 className="mb-4 text-sm font-semibold text-slate-800">{idEnEdition ? "Modifier l'employé" : 'Nouvel employé'}</h3>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             <div>
               <label className={LABEL}>Matricule</label>
@@ -393,6 +497,17 @@ export function Employes() {
               </select>
             </div>
             <div>
+              <label className={LABEL}>Fonction</label>
+              <select value={champs.fonctionId} onChange={(e) => majChamp('fonctionId', e.target.value)} className={CHAMP}>
+                <option value="">— Non renseignée —</option>
+                {fonctionsVisibles.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.intitule}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
               <label className={LABEL}>Personnes à charge</label>
               <input
                 type="number"
@@ -449,11 +564,95 @@ export function Employes() {
               </label>
             </div>
           </div>
+
+          <h4 className="mb-3 mt-6 text-sm font-semibold text-slate-800">Informations complémentaires</h4>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            <div>
+              <label className={LABEL}>Situation matrimoniale</label>
+              <select
+                value={champs.situationMatrimoniale}
+                onChange={(e) => majChamp('situationMatrimoniale', e.target.value)}
+                className={CHAMP}
+              >
+                <option value="">— Non renseignée —</option>
+                {OPTIONS_SITUATION_MATRIMONIALE.map((v) => (
+                  <option key={v} value={v}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={LABEL}>Groupe sanguin</label>
+              <select
+                value={champs.groupeSanguin}
+                onChange={(e) => majChamp('groupeSanguin', e.target.value)}
+                className={CHAMP}
+              >
+                <option value="">— Non renseigné —</option>
+                {OPTIONS_GROUPE_SANGUIN.map((v) => (
+                  <option key={v} value={v}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="sm:col-span-1">
+              <label className={LABEL}>Maladie particulière</label>
+              <input
+                value={champs.maladieParticuliere}
+                onChange={(e) => majChamp('maladieParticuliere', e.target.value)}
+                placeholder="Ex. Hypertension, diabète…"
+                className={CHAMP}
+              />
+            </div>
+            <div>
+              <label className={LABEL}>Personne à prévenir en cas de besoin</label>
+              <input
+                value={champs.contactUrgenceNom}
+                onChange={(e) => majChamp('contactUrgenceNom', e.target.value)}
+                placeholder="Nom et prénoms"
+                className={CHAMP}
+              />
+            </div>
+            <div>
+              <label className={LABEL}>Lien de parenté</label>
+              <input
+                value={champs.contactUrgenceLien}
+                onChange={(e) => majChamp('contactUrgenceLien', e.target.value)}
+                placeholder="Ex. Époux, frère…"
+                className={CHAMP}
+              />
+            </div>
+            <div>
+              <label className={LABEL}>Téléphone 1</label>
+              <input
+                value={champs.contactUrgenceTel}
+                onChange={(e) => majChamp('contactUrgenceTel', e.target.value)}
+                className={CHAMP}
+              />
+            </div>
+            <div>
+              <label className={LABEL}>Téléphone 2</label>
+              <input
+                value={champs.contactUrgenceTel2}
+                onChange={(e) => majChamp('contactUrgenceTel2', e.target.value)}
+                className={CHAMP}
+              />
+            </div>
+          </div>
+
           <button
             disabled={envoiEnCours}
             className="mt-4 rounded-md bg-primary-700 px-4 py-2 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-800 hover:shadow-md disabled:pointer-events-none disabled:opacity-60"
           >
-            {envoiEnCours ? 'Création...' : "Créer l'employé"}
+            {envoiEnCours
+              ? idEnEdition
+                ? 'Enregistrement...'
+                : 'Création...'
+              : idEnEdition
+                ? 'Enregistrer les modifications'
+                : "Créer l'employé"}
           </button>
         </form>
       )}
@@ -558,12 +757,23 @@ export function Employes() {
 
       {employeSelectionne && (
         <Modale titre={`${employeSelectionne.nom} ${employeSelectionne.prenoms}`} onFermer={() => setEmployeSelectionne(null)}>
+          {peutGerer && (
+            <div className="mb-4 flex justify-end">
+              <button
+                onClick={() => ouvrirEdition(employeSelectionne)}
+                className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors duration-200 hover:bg-slate-50"
+              >
+                Modifier
+              </button>
+            </div>
+          )}
           <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
             {[
               ['Matricule', employeSelectionne.matricule],
               ['Statut', <BadgeStatut key="s" statut={employeSelectionne.statut} />],
               ['Filiale', nomFiliale(employeSelectionne.filialeId)],
               ['Catégorie professionnelle', libelleCategorie(employeSelectionne.categorieProfessionnelle) ?? 'Non renseignée'],
+              ['Fonction', nomFonction(employeSelectionne.fonctionId) ?? 'Non renseignée'],
               ['Sexe', employeSelectionne.sexe],
               ['Nationalité', employeSelectionne.nationalite],
               ['Téléphone', employeSelectionne.telephone],
@@ -571,6 +781,8 @@ export function Employes() {
               ['N° CNSS', employeSelectionne.numCnss],
               ['Date de naissance', formaterDateFr(employeSelectionne.dateNaissance)],
               ["Date d'embauche", formaterDateFr(employeSelectionne.dateEmbauche)],
+              ['Situation matrimoniale', employeSelectionne.situationMatrimoniale ?? 'Non renseignée'],
+              ['Groupe sanguin', employeSelectionne.groupeSanguin ?? 'Non renseigné'],
             ].map(([label, valeur]) => (
               <div key={label as string}>
                 <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</dt>
@@ -578,6 +790,127 @@ export function Employes() {
               </div>
             ))}
           </dl>
+
+          <div className="mt-4 border-t border-slate-100 pt-4">
+            <dt className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">
+              Personne à prévenir en cas de besoin
+            </dt>
+            {employeSelectionne.contactUrgenceNom ||
+            employeSelectionne.contactUrgenceLien ||
+            employeSelectionne.contactUrgenceTel ||
+            employeSelectionne.contactUrgenceTel2 ? (
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                <div>
+                  <dt className="text-xs text-slate-500">Nom</dt>
+                  <dd className="mt-0.5 text-slate-800">{employeSelectionne.contactUrgenceNom ?? '—'}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-slate-500">Lien de parenté</dt>
+                  <dd className="mt-0.5 text-slate-800">{employeSelectionne.contactUrgenceLien ?? '—'}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-slate-500">Téléphone 1</dt>
+                  <dd className="mt-0.5 text-slate-800">{employeSelectionne.contactUrgenceTel ?? '—'}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-slate-500">Téléphone 2</dt>
+                  <dd className="mt-0.5 text-slate-800">{employeSelectionne.contactUrgenceTel2 ?? '—'}</dd>
+                </div>
+              </dl>
+            ) : (
+              <p className="text-sm text-slate-400">Non renseignée</p>
+            )}
+          </div>
+
+          <div className="mt-4 border-t border-slate-100 pt-4">
+            <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">Maladie particulière</dt>
+            <dd className="mt-0.5 text-slate-800">{employeSelectionne.maladieParticuliere ?? 'Non renseignée'}</dd>
+          </div>
+
+          <div className="mt-4 border-t border-slate-100 pt-4">
+            <dt className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">Statut</dt>
+            {peutGerer ? (
+              <div className="flex flex-wrap items-center gap-2">
+                {employeSelectionne.statut !== 'actif' && (
+                  <button
+                    disabled={statutEnCours}
+                    onClick={() => changerStatutEmployeSelectionne('actif')}
+                    className="rounded-md border border-succes-600 px-3 py-1.5 text-xs font-medium text-succes-700 transition-colors duration-200 hover:bg-succes-100 disabled:opacity-50"
+                  >
+                    {employeSelectionne.statut === 'sorti' ? 'Réactiver' : 'Activer'}
+                  </button>
+                )}
+                {employeSelectionne.statut === 'actif' && (
+                  <button
+                    disabled={statutEnCours}
+                    onClick={() => changerStatutEmployeSelectionne('suspendu')}
+                    className="rounded-md border border-alerte-600 px-3 py-1.5 text-xs font-medium text-alerte-700 transition-colors duration-200 hover:bg-alerte-100 disabled:opacity-50"
+                  >
+                    Suspendre
+                  </button>
+                )}
+                {employeSelectionne.statut !== 'sorti' && !sortieOuverte && (
+                  <button
+                    disabled={statutEnCours}
+                    onClick={() => setSortieOuverte(true)}
+                    className="rounded-md border border-erreur-600 px-3 py-1.5 text-xs font-medium text-erreur-600 transition-colors duration-200 hover:bg-red-50 disabled:opacity-50"
+                  >
+                    Marquer sorti
+                  </button>
+                )}
+              </div>
+            ) : (
+              <dd className="mt-0.5 text-slate-800">{LIBELLES_STATUT[employeSelectionne.statut]}</dd>
+            )}
+
+            {employeSelectionne.statut === 'sorti' && employeSelectionne.dateSortie && (
+              <p className="mt-2 text-xs text-slate-500">
+                Sorti le {formaterDateFr(employeSelectionne.dateSortie)}
+                {employeSelectionne.motifSortie && ` — ${employeSelectionne.motifSortie}`}
+              </p>
+            )}
+
+            {sortieOuverte && (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!dateSortieForm) return;
+                  changerStatutEmployeSelectionne('sorti', dateSortieForm, motifSortieForm || undefined);
+                }}
+                className="mt-3 space-y-2 rounded-md bg-slate-50 p-3"
+              >
+                <div>
+                  <label className={LABEL}>Date de sortie</label>
+                  <input
+                    type="date"
+                    value={dateSortieForm}
+                    onChange={(e) => setDateSortieForm(e.target.value)}
+                    required
+                    className={CHAMP}
+                  />
+                </div>
+                <div>
+                  <label className={LABEL}>Motif (optionnel)</label>
+                  <input value={motifSortieForm} onChange={(e) => setMotifSortieForm(e.target.value)} className={CHAMP} />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    disabled={statutEnCours}
+                    className="rounded-md bg-erreur-600 px-3 py-1.5 text-xs font-medium text-white transition-colors duration-200 hover:bg-erreur-700 disabled:opacity-50"
+                  >
+                    {statutEnCours ? 'Envoi...' : 'Confirmer la sortie'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSortieOuverte(false)}
+                    className="text-xs text-slate-500 hover:underline"
+                  >
+                    Annuler
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
 
           <div className="mt-4 border-t border-slate-100 pt-4">
             <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">Lieu d'affectation par défaut</dt>

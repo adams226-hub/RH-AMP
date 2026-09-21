@@ -198,12 +198,9 @@ export function Attestations() {
                     <Champ label="Nom et prénoms" valeur={d.nomPrenomsEmploye} onChange={(v) => champ('nomPrenomsEmploye', v)} />
                     <Champ label="Date de naissance" type="date" valeur={d.dateNaissance ?? ''} onChange={(v) => champ('dateNaissance', v)} />
                     <Champ label="Lieu de naissance" valeur={d.lieuNaissance ?? ''} onChange={(v) => champ('lieuNaissance', v)} />
-                    <Champ label="Pièce d'identité (CNIB)" valeur={d.numeroPiece} onChange={(v) => champ('numeroPiece', v)} />
+                    <Champ label="Matricule" valeur={d.matricule} onChange={(v) => champ('matricule', v)} />
                     <Champ label="Date d'embauche" type="date" valeur={d.dateEmbauche} onChange={(v) => champ('dateEmbauche', v)} />
                     <Champ label="Poste" valeur={d.poste} onChange={(v) => champ('poste', v)} />
-                    <Champ label="Type de contrat" valeur={d.typeContrat} onChange={(v) => champ('typeContrat', v)} />
-                    <Champ label="Filiale" valeur={d.filiale} onChange={(v) => champ('filiale', v)} />
-                    <Champ label="Lieu d'affectation" valeur={d.lieuAffectation} onChange={(v) => champ('lieuAffectation', v)} />
                   </>
                 );
               })()}
@@ -218,6 +215,9 @@ export function Attestations() {
                   return (
                     <>
                       <Champ label="Nom et prénoms" valeur={d.nomPrenomsEmploye} onChange={(v) => champ('nomPrenomsEmploye', v)} />
+                      <Champ label="Date de naissance" type="date" valeur={d.dateNaissance ?? ''} onChange={(v) => champ('dateNaissance', v)} />
+                      <Champ label="Lieu de naissance" valeur={d.lieuNaissance ?? ''} onChange={(v) => champ('lieuNaissance', v)} />
+                      <Champ label="Matricule" valeur={d.matricule} onChange={(v) => champ('matricule', v)} />
                       <Champ label="Date d'embauche" type="date" valeur={d.dateEmbauche} onChange={(v) => champ('dateEmbauche', v)} />
                       <Champ label="Date de sortie" type="date" valeur={d.dateSortie} onChange={(v) => champ('dateSortie', v)} />
                       <Champ label="Durée de service" valeur={d.dureeService} onChange={(v) => champ('dureeService', v)} />
@@ -227,6 +227,10 @@ export function Attestations() {
               </div>
               <div className="mb-4">
                 <label className={LABEL}>Postes occupés successivement</label>
+                <p className="mb-2 text-xs text-slate-400">
+                  Un seul poste : affiché en ligne ("en qualité de X"). Plusieurs postes : affichés en liste, comme
+                  l'exige la loi pour un certificat de travail.
+                </p>
                 <div className="space-y-2">
                   {(donnees as DonneesCertificatTravail).postesOccupes.map((p, i) => (
                     <div key={i} className="grid grid-cols-1 gap-2 sm:grid-cols-[2fr_1fr_1fr_auto]">
@@ -253,14 +257,6 @@ export function Attestations() {
                   </button>
                 </div>
               </div>
-              <div className="mb-4">
-                <Champ
-                  label="Motif de départ (mention neutre — démission / fin de contrat / licenciement)"
-                  type="textarea"
-                  valeur={(donnees as DonneesCertificatTravail).motifDepart}
-                  onChange={(v) => champ('motifDepart', v)}
-                />
-              </div>
             </>
           )}
 
@@ -272,6 +268,8 @@ export function Attestations() {
                   return (
                     <>
                       <Champ label="Nom et prénoms" valeur={d.nomPrenomsStagiaire} onChange={(v) => champ('nomPrenomsStagiaire', v)} />
+                      <Champ label="Date de naissance" type="date" valeur={d.dateNaissance ?? ''} onChange={(v) => champ('dateNaissance', v)} />
+                      <Champ label="Lieu de naissance" valeur={d.lieuNaissance ?? ''} onChange={(v) => champ('lieuNaissance', v)} />
                       <Champ label="Filière d'études" valeur={d.filiereEtudes} onChange={(v) => champ('filiereEtudes', v)} />
                       <Champ label="Établissement" valeur={d.etablissement} onChange={(v) => champ('etablissement', v)} />
                       <Champ label="Début du stage" type="date" valeur={d.dateDebutStage} onChange={(v) => champ('dateDebutStage', v)} />

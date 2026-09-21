@@ -1,11 +1,17 @@
 import { useEffect, useState } from 'react';
 import { ErreurApi, api } from '../api/client';
 import { Badge, CouleurBadge } from '../components/Badge';
+import { FiltreSelect } from '../components/FiltreSelect';
 import { IconeCyclePaie } from '../components/icones';
 import { MiseEnPage } from '../components/MiseEnPage';
 import { useAuth } from '../context/AuthContext';
 import { Filiale } from '../types/postes';
-import { ResumeCyclePaie, StatutCyclePaie } from '../types/cyclesPaie';
+import { Chantier } from '../types/pointage';
+import { CyclePaie as CycleMensuel, ResumeCyclePaie, StatutCyclePaie } from '../types/cyclesPaie';
+
+function formaterDateFr(date: string | null): string {
+  return date ? new Date(date).toLocaleDateString('fr-FR') : '-';
+}
 
 function formaterFCFA(montant: number) {
   return `${montant.toLocaleString('fr-FR')} F CFA`;
@@ -51,12 +57,18 @@ export function CyclePaie() {
   const [action, setAction] = useState<string | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
 
+  const [cycles, setCycles] = useState<CycleMensuel[]>([]);
+  const [filtreFiliale, setFiltreFiliale] = useState('');
+  const [chantiers, setChantiers] = useState<Chantier[]>([]);
+  const [filtreChantier, setFiltreChantier] = useState('');
+
   useEffect(() => {
     if (!jeton) return;
     api.listerFiliales(jeton).then((liste) => {
       setFiliales(liste);
       if (!filialeId && liste.length > 0) setFilialeId(liste[0].id);
     });
+    api.listerChantiers(jeton).then(setChantiers);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jeton]);
 
@@ -71,7 +83,16 @@ export function CyclePaie() {
       .finally(() => setChargement(false));
   }
 
+  function rafraichirListe() {
+    if (!jeton) return;
+    api
+      .listerCyclesPaie(jeton, `${periode}-01`)
+      .then(setCycles)
+      .catch(() => {});
+  }
+
   useEffect(rafraichir, [jeton, filialeId, periode]);
+  useEffect(rafraichirListe, [jeton, periode]);
 
   async function executer(nom: string, tache: () => Promise<unknown>) {
     setAction(nom);
@@ -79,6 +100,7 @@ export function CyclePaie() {
     try {
       await tache();
       rafraichir();
+      rafraichirListe();
     } catch (e) {
       setErreur(e instanceof ErreurApi ? e.message : `Erreur lors de : ${nom}`);
     } finally {
@@ -99,6 +121,7 @@ export function CyclePaie() {
       lien.click();
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
       rafraichir();
+      rafraichirListe();
     } catch (e) {
       setErreur(e instanceof ErreurApi ? e.message : 'Erreur lors de la génération du Journal de Paie');
     } finally {
@@ -258,6 +281,84 @@ export function CyclePaie() {
           )}
         </div>
       ) : null}
+
+      <div className="mt-8">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <h3 className="text-base font-semibold text-slate-900">Tous les cycles — {new Date(`${periode}-01`).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}</h3>
+          <div className="flex flex-wrap gap-2">
+            <div className="w-56">
+              <FiltreSelect
+                valeur={filtreFiliale}
+                onChange={setFiltreFiliale}
+                toutLibelle="Toutes les filiales"
+                options={filiales.map((f) => ({ valeur: f.id, libelle: f.nom }))}
+              />
+            </div>
+            <div className="w-56">
+              <FiltreSelect
+                valeur={filtreChantier}
+                onChange={setFiltreChantier}
+                toutLibelle="Tous les chantiers"
+                options={chantiers.map((c) => ({ valeur: c.id, libelle: c.nom }))}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+                <th className="px-4 py-3">Filiale</th>
+                <th className="px-4 py-3">Statut</th>
+                <th className="px-4 py-3">Calculé le</th>
+                <th className="px-4 py-3">Vérifié le</th>
+                <th className="px-4 py-3">Exporté le</th>
+                <th className="px-4 py-3">Clôturé le</th>
+                <th className="px-4 py-3" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filiales
+                .filter((f) => !filtreFiliale || f.id === filtreFiliale)
+                // Un cycle est par filiale, pas par chantier — choisir un chantier restreint donc
+                // la liste à la filiale à laquelle ce chantier est rattaché.
+                .filter((f) => !filtreChantier || chantiers.find((c) => c.id === filtreChantier)?.filialeId === f.id)
+                .map((f) => {
+                  const cycle = cycles.find((c) => c.filialeId === f.id);
+                  const statut: StatutCyclePaie = cycle?.statut ?? 'ouvert';
+                  return (
+                    <tr key={f.id} className="transition-colors duration-200 hover:bg-slate-50">
+                      <td className="px-4 py-3 font-medium text-slate-900">{f.nom}</td>
+                      <td className="px-4 py-3">
+                        <Badge couleur={COULEURS_STATUT[statut]}>{LIBELLES_STATUT[statut]}</Badge>
+                      </td>
+                      <td className="px-4 py-3">{formaterDateFr(cycle?.calculeLe ?? null)}</td>
+                      <td className="px-4 py-3">{formaterDateFr(cycle?.verifieLe ?? null)}</td>
+                      <td className="px-4 py-3">{formaterDateFr(cycle?.exporteLe ?? null)}</td>
+                      <td className="px-4 py-3">{formaterDateFr(cycle?.clotureLe ?? null)}</td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => setFilialeId(f.id)}
+                          className="font-medium text-primary-700 transition-colors duration-200 hover:underline"
+                        >
+                          Voir
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              {filiales.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-4 py-6 text-center text-sm text-slate-500">
+                    Aucune filiale.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </MiseEnPage>
   );
 }

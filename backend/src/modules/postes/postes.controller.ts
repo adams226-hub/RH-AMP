@@ -46,6 +46,7 @@ const schemaCreationFonction = z.object({
 });
 
 const schemaCoordonneesFiliale = z.object({
+  raisonSociale: z.string().optional(),
   adresse: z.string().optional(),
   rccm: z.string().optional(),
   ifu: z.string().optional(),

@@ -60,11 +60,15 @@ export function Missions() {
 
   const [formulaireOuvert, setFormulaireOuvert] = useState(false);
   const [employeId, setEmployeId] = useState('');
+  const [numeroOrdreMission, setNumeroOrdreMission] = useState('');
   const [destination, setDestination] = useState('');
   const [motif, setMotif] = useState('');
   const [dateDepart, setDateDepart] = useState('');
   const [dateRetourPrevue, setDateRetourPrevue] = useState('');
+  const [montantHebergement, setMontantHebergement] = useState('0');
+  const [montantRestauration, setMontantRestauration] = useState('0');
   const [envoiEnCours, setEnvoiEnCours] = useState(false);
+  const [exportEnCours, setExportEnCours] = useState(false);
 
   const [missionRetour, setMissionRetour] = useState<MissionAvecEmploye | null>(null);
   const [dateRetourReelle, setDateRetourReelle] = useState('');
@@ -111,22 +115,53 @@ export function Missions() {
 
   async function creer(evenement: FormEvent) {
     evenement.preventDefault();
-    if (!jeton || !employeId || !destination || !motif || !dateDepart || !dateRetourPrevue) return;
+    if (!jeton || !employeId || !numeroOrdreMission || !destination || !motif || !dateDepart || !dateRetourPrevue) return;
     setEnvoiEnCours(true);
     setErreur(null);
     try {
-      await api.creerMission(jeton, { employeId, destination, motif, dateDepart, dateRetourPrevue });
+      await api.creerMission(jeton, {
+        employeId,
+        numeroOrdreMission,
+        destination,
+        motif,
+        dateDepart,
+        dateRetourPrevue,
+        montantHebergement: Number(montantHebergement),
+        montantRestauration: Number(montantRestauration),
+      });
       setEmployeId('');
+      setNumeroOrdreMission('');
       setDestination('');
       setMotif('');
       setDateDepart('');
       setDateRetourPrevue('');
+      setMontantHebergement('0');
+      setMontantRestauration('0');
       setFormulaireOuvert(false);
       rafraichir();
     } catch (e) {
       setErreur(e instanceof ErreurApi ? e.message : 'Erreur lors de la création');
     } finally {
       setEnvoiEnCours(false);
+    }
+  }
+
+  async function telechargerExcel() {
+    if (!jeton) return;
+    setExportEnCours(true);
+    setErreur(null);
+    try {
+      const blob = await api.exporterMissionsExcel(jeton);
+      const url = URL.createObjectURL(blob);
+      const lien = document.createElement('a');
+      lien.href = url;
+      lien.download = 'missions.xlsx';
+      lien.click();
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (e) {
+      setErreur(e instanceof ErreurApi ? e.message : "Erreur lors de l'export Excel");
+    } finally {
+      setExportEnCours(false);
     }
   }
 
@@ -153,11 +188,16 @@ export function Missions() {
           <h2 className="text-lg font-semibold text-slate-900">Missions</h2>
           <p className="text-sm text-slate-500">Suivi des départs et retours — statut déduit automatiquement des dates</p>
         </div>
-        {peutGerer && (
-          <button onClick={() => setFormulaireOuvert((v) => !v)} className={BOUTON}>
-            {formulaireOuvert ? 'Fermer' : '+ Nouvelle mission'}
+        <div className="flex gap-2">
+          <button type="button" disabled={exportEnCours} onClick={telechargerExcel} className={BOUTON}>
+            {exportEnCours ? 'Génération...' : 'Télécharger en Excel'}
           </button>
-        )}
+          {peutGerer && (
+            <button onClick={() => setFormulaireOuvert((v) => !v)} className={BOUTON}>
+              {formulaireOuvert ? 'Fermer' : '+ Nouvelle mission'}
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="mb-6 grid grid-cols-3 gap-4">
@@ -176,6 +216,13 @@ export function Missions() {
           </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <input
+              value={numeroOrdreMission}
+              onChange={(e) => setNumeroOrdreMission(e.target.value)}
+              placeholder="N° d'ordre de mission"
+              required
+              className={CHAMP}
+            />
+            <input
               value={destination}
               onChange={(e) => setDestination(e.target.value)}
               placeholder="Destination"
@@ -191,6 +238,26 @@ export function Missions() {
               required
               className={CHAMP}
             />
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">Hébergement (F CFA)</label>
+              <input
+                type="number"
+                min="0"
+                value={montantHebergement}
+                onChange={(e) => setMontantHebergement(e.target.value)}
+                className={`w-full ${CHAMP}`}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">Restauration (F CFA)</label>
+              <input
+                type="number"
+                min="0"
+                value={montantRestauration}
+                onChange={(e) => setMontantRestauration(e.target.value)}
+                className={`w-full ${CHAMP}`}
+              />
+            </div>
           </div>
           <button disabled={envoiEnCours} className={`${BOUTON} mt-3`}>
             {envoiEnCours ? 'Envoi...' : 'Enregistrer le départ'}
@@ -229,6 +296,7 @@ export function Missions() {
                   <th className="px-4 py-3">Destination / Motif</th>
                   <EnTeteTriable label="Départ" cleColonne="dateDepart" cleActive={cle} sens={sens} onTrier={trierPar} />
                   <th className="px-4 py-3">Retour prévu</th>
+                  <th className="px-4 py-3">Frais</th>
                   <EnTeteTriable label="Statut" cleColonne="statut" cleActive={cle} sens={sens} onTrier={trierPar} />
                   <th className="px-4 py-3" />
                 </tr>
@@ -243,6 +311,9 @@ export function Missions() {
                     <td className="px-4 py-3">
                       {m.destination}
                       <div className="text-xs text-slate-400">{m.motif}</div>
+                      {m.numeroOrdreMission && (
+                        <div className="font-mono text-xs text-slate-400">N° {m.numeroOrdreMission}</div>
+                      )}
                     </td>
                     <td className="px-4 py-3">{formaterDateFr(m.dateDepart)}</td>
                     <td className="px-4 py-3">
@@ -250,6 +321,10 @@ export function Missions() {
                       {m.dateRetourReelle && (
                         <div className="text-xs text-succes-700">Retour réel : {formaterDateFr(m.dateRetourReelle)}</div>
                       )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div>Hébergt : {m.montantHebergement.toLocaleString('fr-FR')} F</div>
+                      <div className="text-xs text-slate-400">Restauration : {m.montantRestauration.toLocaleString('fr-FR')} F</div>
                     </td>
                     <td className="px-4 py-3">
                       <Badge couleur={COULEURS_STATUT[m.statut]}>{LIBELLES_STATUT[m.statut]}</Badge>

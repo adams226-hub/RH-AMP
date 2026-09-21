@@ -98,6 +98,7 @@ function formaterDuree(debut: string, fin: string): string {
 }
 
 interface EmployePourAttestation {
+  matricule: string;
   nom: string;
   prenoms: string;
   sexe: 'M' | 'F';
@@ -109,15 +110,16 @@ interface EmployePourAttestation {
   statut: string;
   filialeId: string;
   filialeNom: string;
+  filialeRaisonSociale: string | null;
   chantierNom: string | null;
   serviceNom: string | null;
 }
 
 async function chargerEmploye(employeId: string): Promise<EmployePourAttestation> {
   const { rows } = await pool.query(
-    `SELECT e.nom, e.prenoms, e.sexe, e.date_naissance, e.lieu_naissance, e.num_cnib, e.date_embauche,
-            e.date_sortie, e.statut, e.filiale_id, f.nom AS filiale_nom, c.nom AS chantier_nom,
-            s.nom AS service_nom
+    `SELECT e.matricule, e.nom, e.prenoms, e.sexe, e.date_naissance, e.lieu_naissance, e.num_cnib,
+            e.date_embauche, e.date_sortie, e.statut, e.filiale_id, f.nom AS filiale_nom,
+            f.raison_sociale AS filiale_raison_sociale, c.nom AS chantier_nom, s.nom AS service_nom
      FROM employes e
      JOIN filiales f ON f.id = e.filiale_id
      LEFT JOIN chantiers c ON c.id = e.chantier_id
@@ -128,6 +130,7 @@ async function chargerEmploye(employeId: string): Promise<EmployePourAttestation
   if (!rows[0]) throw new ErreurApplicative(404, 'Employé introuvable');
   const l = rows[0];
   return {
+    matricule: l.matricule,
     nom: l.nom,
     prenoms: l.prenoms,
     sexe: l.sexe,
@@ -139,28 +142,31 @@ async function chargerEmploye(employeId: string): Promise<EmployePourAttestation
     statut: l.statut,
     filialeId: l.filiale_id,
     filialeNom: l.filiale_nom,
+    filialeRaisonSociale: l.filiale_raison_sociale,
     chantierNom: l.chantier_nom,
     serviceNom: l.service_nom,
   };
 }
 
-// Aperçu pré-rempli depuis la fiche employé/contrat — champs de jugement (dirigeant,
-// signataire, motif de départ, appréciation, description des missions) volontairement laissés
-// vides : à la charge du RH dans l'aperçu éditable avant génération (cf. décision produit,
-// jamais de mention par défaut sur un motif de rupture ou une appréciation).
+// Aperçu pré-rempli depuis la fiche employé/contrat. Dirigeant/signataire pré-remplis avec le
+// DG du groupe (BATIONO D. Romaric, Directeur Général — signataire observé sur les 4 vrais
+// documents AMP/ROMBAT GOLD, cf. ADDENDUM_VRAIS_MODELES_ATTESTATIONS_AMP.md §7) mais restent
+// librement modifiables dans l'aperçu, une autre personne pouvant signer pour une autre filiale.
+// motif de départ, appréciation, description des missions : volontairement laissés vides (cf.
+// décision produit, jamais de mention par défaut sur un motif de rupture ou une appréciation).
 export async function preparerApercu(employeId: string, type: TypeAttestation): Promise<DonneesAttestation> {
   const employe = await chargerEmploye(employeId);
   const communs = {
-    nomDirigeant: '',
-    fonctionDirigeant: '',
-    fonctionSignataire: '',
-    entreprise: employe.filialeNom,
+    nomDirigeant: 'BATIONO D. Romaric',
+    fonctionDirigeant: 'Directeur Général',
+    fonctionSignataire: 'Directeur Général',
+    entreprise: employe.filialeRaisonSociale || employe.filialeNom,
     dateEmission: new Date().toISOString().slice(0, 10),
   };
 
   if (type === 'att_trav') {
     const { rows } = await pool.query(
-      `SELECT c.type, fo.intitule AS fonction_intitule
+      `SELECT fo.intitule AS fonction_intitule
        FROM contrats c LEFT JOIN fonctions fo ON fo.id = c.fonction_id
        WHERE c.employe_id = $1 AND c.statut = 'actif' ORDER BY c.date_debut DESC LIMIT 1`,
       [employeId]
@@ -174,12 +180,9 @@ export async function preparerApercu(employeId: string, type: TypeAttestation): 
       sexe: employe.sexe,
       dateNaissance: employe.dateNaissance,
       lieuNaissance: employe.lieuNaissance,
-      numeroPiece: employe.numCnib,
+      matricule: employe.matricule,
       dateEmbauche: employe.dateEmbauche,
       poste: contrat.fonction_intitule ?? '',
-      typeContrat: String(contrat.type).toUpperCase(),
-      filiale: employe.filialeNom,
-      lieuAffectation: employe.chantierNom ?? 'Siège',
     };
     return donnees;
   }
@@ -202,11 +205,13 @@ export async function preparerApercu(employeId: string, type: TypeAttestation): 
       ...communs,
       nomPrenomsEmploye: `${employe.nom} ${employe.prenoms}`,
       sexe: employe.sexe,
+      dateNaissance: employe.dateNaissance,
+      lieuNaissance: employe.lieuNaissance,
+      matricule: employe.matricule,
       dateEmbauche: employe.dateEmbauche,
       dateSortie,
       dureeService: formaterDuree(employe.dateEmbauche, dateSortie),
       postesOccupes,
-      motifDepart: '',
     };
     return donnees;
   }
@@ -237,6 +242,8 @@ export async function preparerApercu(employeId: string, type: TypeAttestation): 
     ...communs,
     nomPrenomsStagiaire: `${employe.nom} ${employe.prenoms}`,
     sexe: employe.sexe,
+    dateNaissance: employe.dateNaissance,
+    lieuNaissance: employe.lieuNaissance,
     filiereEtudes: stagiaire?.filiereEtudes ?? '',
     etablissement: stagiaire?.etablissement ?? '',
     dateDebutStage: contratStage.date_debut,

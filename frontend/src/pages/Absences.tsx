@@ -13,6 +13,8 @@ import { SelecteurEmploye } from '../components/SelecteurEmploye';
 import { useAuth } from '../context/AuthContext';
 import { useTri } from '../hooks/useTri';
 import { StatutDemandeConge } from '../types/conges';
+import { Chantier } from '../types/pointage';
+import { Filiale } from '../types/postes';
 import {
   ClassificationAbsence,
   DemandeAbsence,
@@ -86,10 +88,23 @@ function FormulaireDemande({
   bareme,
   onSoumettre,
   envoiEnCours,
+  valeursInitiales,
+  titre = 'Nouvelle demande',
+  libelleBouton = 'Soumettre la demande',
 }: {
   employeSelecteur?: React.ReactNode;
   bareme: EvenementBareme[];
   envoiEnCours: boolean;
+  titre?: string;
+  libelleBouton?: string;
+  valeursInitiales?: {
+    type: TypeDemandeAbsence;
+    motifBareme: string | null;
+    motif: string;
+    dateDebut: string;
+    dateFin: string;
+    justificatifFourni: boolean;
+  };
   onSoumettre: (donnees: {
     type: TypeDemandeAbsence;
     motifBareme?: string;
@@ -99,18 +114,18 @@ function FormulaireDemande({
     justificatifFourni: boolean;
   }) => void;
 }) {
-  const [type, setType] = useState<TypeDemandeAbsence>('permission_exceptionnelle');
-  const [motifBareme, setMotifBareme] = useState('');
-  const [motif, setMotif] = useState('');
-  const [dateDebut, setDateDebut] = useState('');
-  const [dateFin, setDateFin] = useState('');
-  const [justificatifFourni, setJustificatifFourni] = useState(false);
+  const [type, setType] = useState<TypeDemandeAbsence>(valeursInitiales?.type ?? 'permission_exceptionnelle');
+  const [motifBareme, setMotifBareme] = useState(valeursInitiales?.motifBareme ?? '');
+  const [motif, setMotif] = useState(valeursInitiales?.motif ?? '');
+  const [dateDebut, setDateDebut] = useState(valeursInitiales?.dateDebut ?? '');
+  const [dateFin, setDateFin] = useState(valeursInitiales?.dateFin ?? '');
+  const [justificatifFourni, setJustificatifFourni] = useState(valeursInitiales?.justificatifFourni ?? false);
 
   const evenement = bareme.find((e) => e.cle === motifBareme);
 
   function soumettre(evenementForm: FormEvent) {
     evenementForm.preventDefault();
-    if (!dateDebut || !dateFin || !motif) return;
+    if (!dateDebut || !dateFin) return;
     if (type === 'permission_exceptionnelle' && !motifBareme) return;
 
     onSoumettre({
@@ -131,7 +146,7 @@ function FormulaireDemande({
 
   return (
     <form onSubmit={soumettre} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h3 className="mb-3 text-sm font-semibold text-slate-800">Nouvelle demande</h3>
+      {titre && <h3 className="mb-3 text-sm font-semibold text-slate-800">{titre}</h3>}
 
       {employeSelecteur && <div className="mb-3">{employeSelecteur}</div>}
 
@@ -162,10 +177,17 @@ function FormulaireDemande({
                 {e.libelle} ({e.jours} j)
               </option>
             ))}
+            <option value="autre">Autre</option>
           </select>
           {evenement && (
             <p className="mt-1 text-xs text-slate-500">
               Barème : {evenement.jours} jour(s) non déductible(s). Au-delà, l'excédent est soumis à classification RH.
+            </p>
+          )}
+          {motifBareme === 'autre' && (
+            <p className="mt-1 text-xs text-slate-500">
+              Aucun jour non déductible d'office pour un motif hors barème — la RH classera l'intégralité à la
+              validation. Précisez le motif ci-dessous si besoin (facultatif).
             </p>
           )}
         </div>
@@ -177,8 +199,7 @@ function FormulaireDemande({
         <input
           value={motif}
           onChange={(e) => setMotif(e.target.value)}
-          placeholder={type === 'permission_exceptionnelle' ? 'Précision (ex. nom du conjoint)' : 'Motif'}
-          required
+          placeholder={type === 'permission_exceptionnelle' ? 'Précision (ex. nom du conjoint, optionnel)' : 'Motif (optionnel)'}
           className={CHAMP}
         />
       </div>
@@ -189,13 +210,23 @@ function FormulaireDemande({
       </label>
 
       <button disabled={envoiEnCours} className={`${BOUTON} mt-3`}>
-        {envoiEnCours ? 'Envoi...' : 'Soumettre la demande'}
+        {envoiEnCours ? 'Envoi...' : libelleBouton}
       </button>
     </form>
   );
 }
 
-function LigneDemande({ d, jeton, surErreur }: { d: DemandeAbsence; jeton: string; surErreur: (m: string) => void }) {
+function LigneDemande({
+  d,
+  jeton,
+  surErreur,
+  onModifier,
+}: {
+  d: DemandeAbsence;
+  jeton: string;
+  surErreur: (m: string) => void;
+  onModifier?: () => void;
+}) {
   return (
     <>
       <td className="px-4 py-3">
@@ -217,12 +248,22 @@ function LigneDemande({ d, jeton, surErreur }: { d: DemandeAbsence; jeton: strin
         )}
       </td>
       <td className="px-4 py-3 text-right">
-        <button
-          onClick={() => ouvrirFichePdf(jeton, d.id, surErreur)}
-          className="font-medium text-primary-700 transition-colors duration-200 hover:underline"
-        >
-          Fiche PDF
-        </button>
+        <div className="flex justify-end gap-3">
+          {onModifier && d.statut === 'soumise' && (
+            <button
+              onClick={onModifier}
+              className="font-medium text-primary-700 transition-colors duration-200 hover:underline"
+            >
+              Modifier
+            </button>
+          )}
+          <button
+            onClick={() => ouvrirFichePdf(jeton, d.id, surErreur)}
+            className="font-medium text-primary-700 transition-colors duration-200 hover:underline"
+          >
+            Fiche PDF
+          </button>
+        </div>
       </td>
     </>
   );
@@ -246,6 +287,7 @@ function VueEmploye({ jeton, employeId }: { jeton: string | null; employeId: str
   const [bareme, setBareme] = useState<EvenementBareme[]>([]);
   const [erreur, setErreur] = useState<string | null>(null);
   const [envoiEnCours, setEnvoiEnCours] = useState(false);
+  const [demandeAModifier, setDemandeAModifier] = useState<DemandeAbsence | null>(null);
 
   function rafraichir() {
     if (!jeton || !employeId) return;
@@ -282,6 +324,28 @@ function VueEmploye({ jeton, employeId }: { jeton: string | null; employeId: str
       rafraichir();
     } catch (e) {
       setErreur(e instanceof ErreurApi ? e.message : 'Erreur lors de la création');
+    } finally {
+      setEnvoiEnCours(false);
+    }
+  }
+
+  async function modifier(donnees: {
+    type: TypeDemandeAbsence;
+    motifBareme?: string;
+    motif: string;
+    dateDebut: string;
+    dateFin: string;
+    justificatifFourni: boolean;
+  }) {
+    if (!jeton || !demandeAModifier) return;
+    setEnvoiEnCours(true);
+    setErreur(null);
+    try {
+      await api.modifierDemandeAbsence(jeton, demandeAModifier.id, donnees);
+      setDemandeAModifier(null);
+      rafraichir();
+    } catch (e) {
+      setErreur(e instanceof ErreurApi ? e.message : 'Erreur lors de la modification');
     } finally {
       setEnvoiEnCours(false);
     }
@@ -329,7 +393,12 @@ function VueEmploye({ jeton, employeId }: { jeton: string | null; employeId: str
             <tbody className="divide-y divide-slate-100">
               {demandes.map((d) => (
                 <tr key={d.id} className="transition-colors duration-200 hover:bg-slate-50">
-                  <LigneDemande d={d} jeton={jeton ?? ''} surErreur={setErreur} />
+                  <LigneDemande
+                    d={d}
+                    jeton={jeton ?? ''}
+                    surErreur={setErreur}
+                    onModifier={() => setDemandeAModifier(d)}
+                  />
                 </tr>
               ))}
             </tbody>
@@ -340,6 +409,26 @@ function VueEmploye({ jeton, employeId }: { jeton: string | null; employeId: str
       </div>
 
       <FormulaireDemande bareme={bareme} envoiEnCours={envoiEnCours} onSoumettre={creer} />
+
+      {demandeAModifier && (
+        <Modale titre="Modifier la demande" onFermer={() => setDemandeAModifier(null)}>
+          <FormulaireDemande
+            bareme={bareme}
+            envoiEnCours={envoiEnCours}
+            onSoumettre={modifier}
+            titre=""
+            libelleBouton="Enregistrer les modifications"
+            valeursInitiales={{
+              type: demandeAModifier.type,
+              motifBareme: demandeAModifier.motifBareme,
+              motif: demandeAModifier.motif,
+              dateDebut: demandeAModifier.dateDebut,
+              dateFin: demandeAModifier.dateFin,
+              justificatifFourni: demandeAModifier.justificatifFourni,
+            }}
+          />
+        </Modale>
+      )}
     </MiseEnPage>
   );
 }
@@ -359,6 +448,10 @@ function VueGestion({ jeton, role }: { jeton: string | null; role: string | null
 
   const [recherche, setRecherche] = useState('');
   const [filtreStatut, setFiltreStatut] = useState('');
+  const [filtreFiliale, setFiltreFiliale] = useState('');
+  const [filtreChantier, setFiltreChantier] = useState('');
+  const [filtreDateDebut, setFiltreDateDebut] = useState('');
+  const [filtreDateFin, setFiltreDateFin] = useState('');
   const [seulementATraiter, setSeulementATraiter] = useState(false);
   const [page, setPage] = useState(1);
 
@@ -366,6 +459,11 @@ function VueGestion({ jeton, role }: { jeton: string | null; role: string | null
   const [employeId, setEmployeId] = useState('');
   const [envoiEnCours, setEnvoiEnCours] = useState(false);
   const [demandeAClassifier, setDemandeAClassifier] = useState<DemandeAbsenceAvecEmploye | null>(null);
+  const [demandeAModifier, setDemandeAModifier] = useState<DemandeAbsenceAvecEmploye | null>(null);
+  const [exportEnCours, setExportEnCours] = useState(false);
+
+  const [filiales, setFiliales] = useState<Filiale[]>([]);
+  const [chantiers, setChantiers] = useState<Chantier[]>([]);
 
   function rafraichir() {
     if (!jeton) return;
@@ -375,6 +473,31 @@ function VueGestion({ jeton, role }: { jeton: string | null; role: string | null
       .then(setDemandes)
       .catch((e) => setErreur(e instanceof ErreurApi ? e.message : 'Erreur de chargement'))
       .finally(() => setChargement(false));
+  }
+
+  useEffect(() => {
+    if (!jeton) return;
+    api.listerFiliales(jeton).then(setFiliales);
+    api.listerChantiers(jeton).then(setChantiers);
+  }, [jeton]);
+
+  async function telechargerExcel() {
+    if (!jeton) return;
+    setExportEnCours(true);
+    setErreur(null);
+    try {
+      const blob = await api.exporterAbsencesExcel(jeton);
+      const url = URL.createObjectURL(blob);
+      const lien = document.createElement('a');
+      lien.href = url;
+      lien.download = 'absences.xlsx';
+      lien.click();
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (e) {
+      setErreur(e instanceof ErreurApi ? e.message : "Erreur lors de l'export Excel");
+    } finally {
+      setExportEnCours(false);
+    }
   }
 
   useEffect(rafraichir, [jeton]);
@@ -391,6 +514,10 @@ function VueGestion({ jeton, role }: { jeton: string | null; role: string | null
     return demandes.filter((d) => {
       if (seulementATraiter && !estATraiter(d)) return false;
       if (filtreStatut && d.statut !== filtreStatut) return false;
+      if (filtreFiliale && d.filialeId !== filtreFiliale) return false;
+      if (filtreChantier && d.chantierId !== filtreChantier) return false;
+      if (filtreDateDebut && d.dateDebut < filtreDateDebut) return false;
+      if (filtreDateFin && d.dateFin > filtreDateFin) return false;
       if (terme) {
         const cible = `${d.employeMatricule} ${d.employeNom} ${d.employePrenoms}`.toLowerCase();
         if (!cible.includes(terme)) return false;
@@ -398,14 +525,28 @@ function VueGestion({ jeton, role }: { jeton: string | null; role: string | null
       return true;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [demandes, recherche, filtreStatut, seulementATraiter, peutDonnerAvis, peutDecider]);
+  }, [
+    demandes,
+    recherche,
+    filtreStatut,
+    filtreFiliale,
+    filtreChantier,
+    filtreDateDebut,
+    filtreDateFin,
+    seulementATraiter,
+    peutDonnerAvis,
+    peutDecider,
+  ]);
 
   const { trie, cle, sens, trierPar } = useTri<DemandeAbsenceAvecEmploye>(filtres, 'dateDebut');
   const totalPages = Math.max(1, Math.ceil(trie.length / PAR_PAGE));
   const pageBornee = Math.min(page, totalPages);
   const pageAffichee = trie.slice((pageBornee - 1) * PAR_PAGE, pageBornee * PAR_PAGE);
 
-  useEffect(() => setPage(1), [recherche, filtreStatut, seulementATraiter]);
+  useEffect(
+    () => setPage(1),
+    [recherche, filtreStatut, filtreFiliale, filtreChantier, filtreDateDebut, filtreDateFin, seulementATraiter]
+  );
 
   const nbATraiter = useMemo(() => demandes.filter(estATraiter).length, [demandes, peutDonnerAvis, peutDecider]);
 
@@ -465,6 +606,27 @@ function VueGestion({ jeton, role }: { jeton: string | null; role: string | null
     }
   }
 
+  async function modifier(donnees: {
+    type: TypeDemandeAbsence;
+    motifBareme?: string;
+    motif: string;
+    dateDebut: string;
+    dateFin: string;
+    justificatifFourni: boolean;
+  }) {
+    if (!jeton || !demandeAModifier) return;
+    setEnvoiEnCours(true);
+    try {
+      await api.modifierDemandeAbsence(jeton, demandeAModifier.id, donnees);
+      setDemandeAModifier(null);
+      rafraichir();
+    } catch (e) {
+      setErreur(e instanceof ErreurApi ? e.message : 'Erreur lors de la modification');
+    } finally {
+      setEnvoiEnCours(false);
+    }
+  }
+
   return (
     <MiseEnPage>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
@@ -474,11 +636,16 @@ function VueGestion({ jeton, role }: { jeton: string | null; role: string | null
             {demandes.length} demande(s) dans votre périmètre — permissions exceptionnelles et absences hors barème
           </p>
         </div>
-        {peutCreer && (
-          <button onClick={() => setFormulaireOuvert((v) => !v)} className={BOUTON}>
-            {formulaireOuvert ? 'Fermer' : '+ Nouvelle demande'}
+        <div className="flex gap-2">
+          <button type="button" disabled={exportEnCours} onClick={telechargerExcel} className={BOUTON}>
+            {exportEnCours ? 'Génération...' : 'Télécharger en Excel'}
           </button>
-        )}
+          {peutCreer && (
+            <button onClick={() => setFormulaireOuvert((v) => !v)} className={BOUTON}>
+              {formulaireOuvert ? 'Fermer' : '+ Nouvelle demande'}
+            </button>
+          )}
+        </div>
       </div>
 
       {(peutDonnerAvis || peutDecider) && nbATraiter > 0 && (
@@ -518,6 +685,32 @@ function VueGestion({ jeton, role }: { jeton: string | null; role: string | null
           onChange={setFiltreStatut}
           toutLibelle="Tous les statuts"
           options={Object.entries(LIBELLES_STATUT).map(([valeur, libelle]) => ({ valeur, libelle }))}
+        />
+        <FiltreSelect
+          valeur={filtreFiliale}
+          onChange={setFiltreFiliale}
+          toutLibelle="Toutes les filiales"
+          options={filiales.map((f) => ({ valeur: f.id, libelle: f.nom }))}
+        />
+        <FiltreSelect
+          valeur={filtreChantier}
+          onChange={setFiltreChantier}
+          toutLibelle="Tous les chantiers"
+          options={chantiers.map((c) => ({ valeur: c.id, libelle: c.nom }))}
+        />
+        <input
+          type="date"
+          value={filtreDateDebut}
+          onChange={(e) => setFiltreDateDebut(e.target.value)}
+          title="À partir du"
+          className={CHAMP}
+        />
+        <input
+          type="date"
+          value={filtreDateFin}
+          onChange={(e) => setFiltreDateFin(e.target.value)}
+          title="Jusqu'au"
+          className={CHAMP}
         />
         <span className="ml-auto text-xs text-slate-500">
           {trie.length} résultat{trie.length > 1 ? 's' : ''}
@@ -569,6 +762,14 @@ function VueGestion({ jeton, role }: { jeton: string | null; role: string | null
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex justify-end gap-3">
+                        {peutCreer && d.statut === 'soumise' && (
+                          <button
+                            onClick={() => setDemandeAModifier(d)}
+                            className="font-medium text-primary-700 transition-colors duration-200 hover:underline"
+                          >
+                            Modifier
+                          </button>
+                        )}
                         {peutDonnerAvis && d.statut === 'soumise' && (
                           <>
                             <button
@@ -633,6 +834,29 @@ function VueGestion({ jeton, role }: { jeton: string | null; role: string | null
           />
         )}
       </div>
+
+      {demandeAModifier && (
+        <Modale
+          titre={`Modifier — ${demandeAModifier.employeNom} ${demandeAModifier.employePrenoms}`}
+          onFermer={() => setDemandeAModifier(null)}
+        >
+          <FormulaireDemande
+            bareme={bareme}
+            envoiEnCours={envoiEnCours}
+            onSoumettre={modifier}
+            titre=""
+            libelleBouton="Enregistrer les modifications"
+            valeursInitiales={{
+              type: demandeAModifier.type,
+              motifBareme: demandeAModifier.motifBareme,
+              motif: demandeAModifier.motif,
+              dateDebut: demandeAModifier.dateDebut,
+              dateFin: demandeAModifier.dateFin,
+              justificatifFourni: demandeAModifier.justificatifFourni,
+            }}
+          />
+        </Modale>
+      )}
 
       {demandeAClassifier && (
         <Modale
