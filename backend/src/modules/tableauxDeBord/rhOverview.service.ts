@@ -9,6 +9,9 @@ interface LigneEmploye {
   categorieProfessionnelle: string | null;
   filiale: string;
   typeContrat: string | null;
+  /** Contrat actif si présent, sinon montant mensuel de référence (employé rémunéré au jour,
+   * sans contrat) — sans ce repli, les KPI de rémunération tombaient à 0 pour tout employé sans
+   * fiche Contrat alors que le dashboard "Masse salariale" (bulletins_paie) les comptait bien. */
   salaireBase: number | null;
 }
 
@@ -52,10 +55,12 @@ async function chargerLignesFiltrees(
 
   const { rows } = await pool.query(
     `SELECT e.sexe, e.nationalite, e.date_naissance, e.date_embauche, e.categorie_professionnelle,
-            f.nom AS filiale, c.type AS type_contrat, c.salaire_base
+            f.nom AS filiale, c.type AS type_contrat,
+            COALESCE(c.salaire_base, tj.salaire_base_mensuel) AS salaire_base
      FROM employes e
      JOIN filiales f ON f.id = e.filiale_id
      LEFT JOIN contrats c ON c.employe_id = e.id AND c.statut = 'actif'
+     LEFT JOIN taux_journaliers tj ON tj.employe_id = e.id
      WHERE ${conditions.join(' AND ')}`,
     valeurs
   );

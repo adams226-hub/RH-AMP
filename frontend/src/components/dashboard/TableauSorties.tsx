@@ -42,7 +42,7 @@ export function TableauSorties({ details }: { details: SortieDetail[] }) {
   useEffect(() => setPage(1), [recherche, filtreMotif]);
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <div className="anim-cascade overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:shadow-md">
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 p-4">
         <h3 className="mr-auto text-sm font-semibold text-slate-800">Détail des sorties ({trie.length})</h3>
         <div className="min-w-[180px]">

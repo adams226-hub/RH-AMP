@@ -16,7 +16,9 @@ function mapEntree(l: Record<string, unknown>): EntreeAudit {
   };
 }
 
-export async function listerJournal(filtres: FiltresAudit): Promise<ResultatAudit> {
+// Partagée entre la liste paginée (écran Audit) et l'export Excel (toutes les lignes, sans
+// pagination) — pour ne jamais faire diverger les deux sur ce qu'un même jeu de filtres désigne.
+function construireConditions(filtres: Pick<FiltresAudit, 'utilisateurId' | 'module' | 'action' | 'recherche' | 'dateDebut' | 'dateFin'>) {
   const conditions: string[] = [];
   const valeurs: unknown[] = [];
 
@@ -35,10 +37,33 @@ export async function listerJournal(filtres: FiltresAudit): Promise<ResultatAudi
     conditions.push(`j.action = $${valeurs.length}`);
   }
 
+  if (filtres.recherche) {
+    valeurs.push(`%${filtres.recherche}%`);
+    conditions.push(`(u.email ILIKE $${valeurs.length} OR j.entite_id::text ILIKE $${valeurs.length})`);
+  }
+
+  if (filtres.dateDebut) {
+    valeurs.push(filtres.dateDebut);
+    conditions.push(`j.created_at >= $${valeurs.length}::date`);
+  }
+
+  if (filtres.dateFin) {
+    valeurs.push(filtres.dateFin);
+    conditions.push(`j.created_at < $${valeurs.length}::date + interval '1 day'`);
+  }
+
+  return { conditions, valeurs };
+}
+
+export async function listerJournal(filtres: FiltresAudit): Promise<ResultatAudit> {
+  const { conditions, valeurs } = construireConditions(filtres);
   const clauseWhere = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
   const { rows: lignesTotal } = await pool.query(
-    `SELECT count(*)::int AS total FROM journal_audit j ${clauseWhere}`,
+    `SELECT count(*)::int AS total
+     FROM journal_audit j
+     LEFT JOIN utilisateurs u ON u.id = j.utilisateur_id
+     ${clauseWhere}`,
     valeurs
   );
 
@@ -58,4 +83,28 @@ export async function listerJournal(filtres: FiltresAudit): Promise<ResultatAudi
   );
 
   return { entrees: rows.map(mapEntree), total: lignesTotal[0].total };
+}
+
+// Export Excel : toutes les lignes correspondant aux filtres, sans pagination — plafonné pour
+// éviter un export incontrôlé si le journal grossit beaucoup (au-delà, affiner les filtres).
+const PLAFOND_EXPORT = 10_000;
+
+export async function listerJournalComplet(
+  filtres: Pick<FiltresAudit, 'utilisateurId' | 'module' | 'action' | 'recherche' | 'dateDebut' | 'dateFin'>
+): Promise<EntreeAudit[]> {
+  const { conditions, valeurs } = construireConditions(filtres);
+  const clauseWhere = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  valeurs.push(PLAFOND_EXPORT);
+  const { rows } = await pool.query(
+    `SELECT j.*, u.email AS utilisateur_email
+     FROM journal_audit j
+     LEFT JOIN utilisateurs u ON u.id = j.utilisateur_id
+     ${clauseWhere}
+     ORDER BY j.created_at DESC
+     LIMIT $${valeurs.length}`,
+    valeurs
+  );
+
+  return rows.map(mapEntree);
 }

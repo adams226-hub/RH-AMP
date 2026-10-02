@@ -105,6 +105,26 @@ async function requeteBlob(chemin: string, jeton: string): Promise<Blob> {
   return reponse.blob();
 }
 
+function construireParametresAudit(params: {
+  page?: number;
+  parPage?: number;
+  module?: string;
+  action?: string;
+  recherche?: string;
+  dateDebut?: string;
+  dateFin?: string;
+}): URLSearchParams {
+  const query = new URLSearchParams();
+  if (params.page !== undefined) query.set('page', String(params.page));
+  if (params.parPage !== undefined) query.set('parPage', String(params.parPage));
+  if (params.module) query.set('module', params.module);
+  if (params.action) query.set('action', params.action);
+  if (params.recherche) query.set('recherche', params.recherche);
+  if (params.dateDebut) query.set('dateDebut', params.dateDebut);
+  if (params.dateFin) query.set('dateFin', params.dateFin);
+  return query;
+}
+
 export const api = {
   connexion: (email: string, motDePasse: string) =>
     requete<{ jeton: string }>('/api/auth/connexion', {
@@ -425,6 +445,11 @@ export const api = {
   ) => requete<Mission>('/api/missions', { method: 'POST', body: JSON.stringify(donnees) }, jeton),
   enregistrerRetourMission: (jeton: string, id: string, dateRetourReelle: string) =>
     requete<Mission>(`/api/missions/${id}/retour`, { method: 'POST', body: JSON.stringify({ dateRetourReelle }) }, jeton),
+  modifierFraisMission: (
+    jeton: string,
+    id: string,
+    donnees: { montantHebergement: number; montantRestauration: number }
+  ) => requete<Mission>(`/api/missions/${id}/frais`, { method: 'PATCH', body: JSON.stringify(donnees) }, jeton),
   exporterMissionsExcel: (jeton: string) => requeteBlob('/api/missions/export-excel', jeton),
 
   // Pointage
@@ -635,11 +660,27 @@ export const api = {
   },
 
   // Audit
-  listerJournalAudit: (jeton: string, params: { page: number; parPage: number; module?: string; action?: string }) => {
-    const query = new URLSearchParams({ page: String(params.page), parPage: String(params.parPage) });
-    if (params.module) query.set('module', params.module);
-    if (params.action) query.set('action', params.action);
+  listerJournalAudit: (
+    jeton: string,
+    params: {
+      page: number;
+      parPage: number;
+      module?: string;
+      action?: string;
+      recherche?: string;
+      dateDebut?: string;
+      dateFin?: string;
+    }
+  ) => {
+    const query = construireParametresAudit(params);
     return requete<ResultatAudit>(`/api/audit/journal?${query.toString()}`, {}, jeton);
+  },
+  exporterJournalAuditExcel: (
+    jeton: string,
+    params: { module?: string; action?: string; recherche?: string; dateDebut?: string; dateFin?: string }
+  ) => {
+    const query = construireParametresAudit(params);
+    return requeteBlob(`/api/audit/export-excel?${query.toString()}`, jeton);
   },
 
   // Utilisateurs

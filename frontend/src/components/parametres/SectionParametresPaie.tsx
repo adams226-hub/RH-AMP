@@ -11,16 +11,18 @@ const CHAMP =
 const LIBELLES: Record<string, string> = {
   taux_cnss_patronale: 'Taux CNSS patronale',
   taux_tpa: 'Taux TPA',
-  taux_fsp: 'Taux FSP',
-  taux_abattement: 'Taux abattement forfaitaire',
+  taux_fsp: 'Retenue FSP (1%)',
+  taux_abattement_cadre: 'Taux abattement — Cadre',
+  taux_abattement_non_cadre: 'Taux abattement — Autre catégorie',
   taux_panier_jour: 'Prime de panier / jour',
 };
 
 const NOTES: Record<string, string> = {
   taux_cnss_patronale: 'Marqué provisoire depuis le départ — à reconfirmer auprès de la CNSS.',
   taux_tpa: 'Taxe Patronale d’Apprentissage, à la charge de l’employeur.',
-  taux_fsp: 'Fonds de Soutien Patriotique, retenue sur le salaire net.',
-  taux_abattement: 'Abattement forfaitaire pour frais professionnels (20% cadre / 25% autre catégorie).',
+  taux_fsp: 'Retenue sur le salaire net — employés sous contrat uniquement (jamais pour un employé sans contrat).',
+  taux_abattement_cadre: 'Abattement forfaitaire pour frais professionnels des employés de catégorie Cadre.',
+  taux_abattement_non_cadre: 'Abattement forfaitaire pour frais professionnels des employés hors catégorie Cadre.',
   taux_panier_jour: 'Montant en F CFA par jour de panier pointé (pointage validé).',
 };
 

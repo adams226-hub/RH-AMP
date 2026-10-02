@@ -2,19 +2,75 @@ import { useEffect, useState } from 'react';
 import { ErreurApi, api } from '../api/client';
 import { AccesRestreint } from '../components/AccesRestreint';
 import { Badge, CouleurBadge } from '../components/Badge';
+import { ChampRecherche } from '../components/ChampRecherche';
 import { EtatVide } from '../components/EtatVide';
 import { IconeAudit } from '../components/icones';
 import { FiltreSelect } from '../components/FiltreSelect';
 import { MiseEnPage } from '../components/MiseEnPage';
 import { Modale } from '../components/Modale';
+import { PageHeader } from '../components/PageHeader';
 import { Pagination } from '../components/Pagination';
+import { Table } from '../components/Table';
 import { useAuth } from '../context/AuthContext';
 import { EntreeAudit } from '../types/audit';
 
+const BOUTON =
+  'rounded-md bg-primary-700 px-4 py-2 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-800 hover:shadow-md disabled:pointer-events-none disabled:opacity-60';
+const CHAMP =
+  'rounded-md border border-slate-300 px-2.5 py-1.5 text-sm transition-colors duration-200 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100';
+
 const PAR_PAGE = 25;
 
-const MODULES = ['employes', 'contrats', 'conges', 'pointage', 'paie', 'archivage', 'postes', 'auth', 'audit'];
+const MODULES = [
+  'auth',
+  'employes',
+  'postes',
+  'contrats',
+  'conges',
+  'conges-speciaux',
+  'absences',
+  'missions',
+  'pointage',
+  'paie',
+  'elements-variables',
+  'cycles-paie',
+  'categories-professionnelles',
+  'tableaux-de-bord',
+  'audit',
+  'utilisateurs',
+  'parametres-paie',
+  'jours-feries',
+  'attestations',
+];
 const ACTIONS = ['creation', 'modification', 'suppression', 'connexion', 'connexion_echouee'];
+
+// Les modules viennent du segment brut de l'URL API (cf. middleware/journalAudit.ts) — traduits
+// ici en libellés lisibles pour un utilisateur RH, sans toucher à ce qui est stocké en base.
+const LIBELLES_MODULE: Record<string, string> = {
+  auth: 'Connexion',
+  employes: 'Employés',
+  postes: 'Organisation (filiales, services, fonctions)',
+  contrats: 'Contrats',
+  conges: 'Congés',
+  'conges-speciaux': 'Congés spéciaux',
+  absences: 'Absences',
+  missions: 'Missions',
+  pointage: 'Pointage',
+  paie: 'Paie',
+  'elements-variables': 'Éléments du mois',
+  'cycles-paie': 'Cycle de paie',
+  'categories-professionnelles': 'Catégories professionnelles',
+  'tableaux-de-bord': 'Tableaux de bord',
+  audit: 'Audit',
+  utilisateurs: 'Utilisateurs',
+  'parametres-paie': 'Paramètres de paie',
+  'jours-feries': 'Jours fériés',
+  attestations: 'Attestations',
+};
+
+function libelleModule(module: string): string {
+  return LIBELLES_MODULE[module] ?? module;
+}
 
 const COULEURS_ACTION: Record<string, CouleurBadge> = {
   creation: 'succes',
@@ -32,8 +88,15 @@ const LIBELLES_ACTION: Record<string, string> = {
   connexion_echouee: 'Connexion échouée',
 };
 
+// Format fixe (02/10/2026 15:35), jamais coupé sur deux lignes dans le tableau — demande
+// explicite, plus précis que le format "2 oct. 2026, 15:35" utilisé auparavant.
 function formaterHorodatage(iso: string) {
-  return new Date(iso).toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' });
+  const d = new Date(iso);
+  const jour = String(d.getDate()).padStart(2, '0');
+  const mois = String(d.getMonth() + 1).padStart(2, '0');
+  const heures = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  return `${jour}/${mois}/${d.getFullYear()} ${heures}:${minutes}`;
 }
 
 // --- Lisibilisation du détail d'action (Avant / Après) ---
@@ -199,6 +262,36 @@ function ChampsLisibles({ donnees, referentiels }: { donnees: unknown; referenti
   );
 }
 
+// La cible d'une action : si l'entité journalisée est un employé, un utilisateur ou un élément
+// d'organisation, on affiche directement son nom. Sinon (contrat, congé, pointage...), on se rabat
+// sur l'employeId présent dans le corps enregistré — l'info la plus utile pour un RH, à défaut de
+// charger un référentiel dédié pour chaque module. En dernier recours, l'identifiant brut.
+function resoudreCible(entree: EntreeAudit, referentiels: Referentiels): string {
+  if (entree.module === 'utilisateurs' && entree.entiteId) {
+    return referentiels.utilisateurs[entree.entiteId] ?? entree.entiteId;
+  }
+  if (entree.module === 'employes' && entree.entiteId) {
+    return referentiels.employes[entree.entiteId] ?? entree.entiteId;
+  }
+  if (entree.module === 'postes' && entree.entiteId) {
+    return (
+      referentiels.filiales[entree.entiteId] ??
+      referentiels.departements[entree.entiteId] ??
+      referentiels.services[entree.entiteId] ??
+      referentiels.fonctions[entree.entiteId] ??
+      entree.entiteId
+    );
+  }
+
+  const corps = (entree.valeurApres ?? entree.valeurAvant) as Record<string, unknown> | null;
+  const employeId = corps && typeof corps.employeId === 'string' ? corps.employeId : null;
+  if (employeId) {
+    return referentiels.employes[employeId] ?? employeId;
+  }
+
+  return entree.entiteId ?? '—';
+}
+
 export function Audit() {
   const { jeton, role } = useAuth();
 
@@ -209,6 +302,10 @@ export function Audit() {
   const [page, setPage] = useState(1);
   const [filtreModule, setFiltreModule] = useState('');
   const [filtreAction, setFiltreAction] = useState('');
+  const [recherche, setRecherche] = useState('');
+  const [dateDebut, setDateDebut] = useState('');
+  const [dateFin, setDateFin] = useState('');
+  const [exportEnCours, setExportEnCours] = useState(false);
   const [entreeSelectionnee, setEntreeSelectionnee] = useState<EntreeAudit | null>(null);
   const [referentiels, setReferentiels] = useState<Referentiels>(REFERENTIELS_VIDES);
 
@@ -242,17 +339,53 @@ export function Audit() {
   useEffect(() => {
     if (!jeton || role !== 'super_admin') return;
     setChargement(true);
-    api
-      .listerJournalAudit(jeton, { page, parPage: PAR_PAGE, module: filtreModule || undefined, action: filtreAction || undefined })
-      .then((r) => {
-        setEntrees(r.entrees);
-        setTotal(r.total);
-      })
-      .catch((e) => setErreur(e instanceof ErreurApi ? e.message : 'Erreur de chargement'))
-      .finally(() => setChargement(false));
-  }, [jeton, role, page, filtreModule, filtreAction]);
+    const identifiant = setTimeout(() => {
+      api
+        .listerJournalAudit(jeton, {
+          page,
+          parPage: PAR_PAGE,
+          module: filtreModule || undefined,
+          action: filtreAction || undefined,
+          recherche: recherche.trim() || undefined,
+          dateDebut: dateDebut || undefined,
+          dateFin: dateFin || undefined,
+        })
+        .then((r) => {
+          setEntrees(r.entrees);
+          setTotal(r.total);
+        })
+        .catch((e) => setErreur(e instanceof ErreurApi ? e.message : 'Erreur de chargement'))
+        .finally(() => setChargement(false));
+    }, 250);
+    return () => clearTimeout(identifiant);
+  }, [jeton, role, page, filtreModule, filtreAction, recherche, dateDebut, dateFin]);
 
-  useEffect(() => setPage(1), [filtreModule, filtreAction]);
+  useEffect(() => setPage(1), [filtreModule, filtreAction, recherche, dateDebut, dateFin]);
+
+  async function telechargerExcel() {
+    if (!jeton) return;
+    setExportEnCours(true);
+    setErreur(null);
+    try {
+      const blob = await api.exporterJournalAuditExcel(jeton, {
+        module: filtreModule || undefined,
+        action: filtreAction || undefined,
+        recherche: recherche.trim() || undefined,
+        dateDebut: dateDebut || undefined,
+        dateFin: dateFin || undefined,
+      });
+      const url = URL.createObjectURL(blob);
+      const lien = document.createElement('a');
+      lien.href = url;
+      lien.download = 'journal-audit.xlsx';
+      lien.click();
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (e) {
+      setErreur(e instanceof ErreurApi ? e.message : "Erreur lors de l'export Excel");
+    } finally {
+      setExportEnCours(false);
+    }
+  }
 
   if (role !== null && role !== 'super_admin') {
     return <AccesRestreint />;
@@ -262,17 +395,27 @@ export function Audit() {
 
   return (
     <MiseEnPage>
-      <h2 className="mb-1 text-lg font-semibold text-slate-900">Journal d'audit</h2>
-      <p className="mb-6 text-sm text-slate-500">{total} action(s) enregistrée(s)</p>
+      <PageHeader
+        titre="Journal d'audit"
+        sousTitre={`${total} action(s) enregistrée(s)`}
+        actions={
+          <button type="button" disabled={exportEnCours} onClick={telechargerExcel} className={BOUTON}>
+            {exportEnCours ? 'Génération...' : 'Télécharger en Excel'}
+          </button>
+        }
+      />
 
       {erreur && <div className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{erreur}</div>}
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
+        <div className="min-w-[220px] flex-1">
+          <ChampRecherche valeur={recherche} onChange={setRecherche} placeholder="Rechercher un email, un identifiant…" />
+        </div>
         <FiltreSelect
           valeur={filtreModule}
           onChange={setFiltreModule}
           toutLibelle="Tous les modules"
-          options={MODULES.map((m) => ({ valeur: m, libelle: m }))}
+          options={MODULES.map((m) => ({ valeur: m, libelle: libelleModule(m) }))}
         />
         <FiltreSelect
           valeur={filtreAction}
@@ -280,65 +423,84 @@ export function Audit() {
           toutLibelle="Toutes les actions"
           options={ACTIONS.map((a) => ({ valeur: a, libelle: LIBELLES_ACTION[a] }))}
         />
+        <label className="flex items-center gap-1.5 text-sm text-slate-500">
+          Du
+          <input type="date" value={dateDebut} onChange={(e) => setDateDebut(e.target.value)} className={CHAMP} />
+        </label>
+        <label className="flex items-center gap-1.5 text-sm text-slate-500">
+          au
+          <input type="date" value={dateFin} onChange={(e) => setDateFin(e.target.value)} className={CHAMP} />
+        </label>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        {chargement ? (
-          <div className="space-y-3 p-4">
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="h-8 animate-pulse rounded bg-slate-100" />
+      <Table
+        chargement={chargement}
+        vide={entrees.length === 0}
+        etatVide={
+          <EtatVide
+            icone={<IconeAudit />}
+            titre="Aucune action enregistrée"
+            message={
+              filtreModule || filtreAction || recherche || dateDebut || dateFin
+                ? 'Aucune action ne correspond à votre recherche ou vos filtres.'
+                : 'Le journal se remplit au fil des actions effectuées dans le SIRH.'
+            }
+          />
+        }
+        pied={<Pagination page={page} totalPages={totalPages} onChange={setPage} totalItems={total} parPage={PAR_PAGE} />}
+      >
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+              <th className="whitespace-nowrap px-3 py-2">Quand</th>
+              <th className="px-3 py-2">Qui</th>
+              <th className="px-3 py-2">Module</th>
+              <th className="px-3 py-2">Action</th>
+              <th className="px-3 py-2">Cible</th>
+              <th className="px-3 py-2" title="Appareil/réseau depuis lequel l'action a été faite — utile en cas d'enquête de sécurité">
+                Adresse IP
+              </th>
+              <th className="px-3 py-2" />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {entrees.map((e) => (
+              <tr key={e.id} className="transition-colors duration-200 hover:bg-slate-50">
+                <td className="whitespace-nowrap px-3 py-2 text-slate-600">{formaterHorodatage(e.createdAt)}</td>
+                <td className="px-3 py-2 text-slate-700">
+                  {e.utilisateurId ? referentiels.utilisateurs[e.utilisateurId] ?? e.utilisateurEmail ?? '—' : '—'}
+                </td>
+                <td className="px-3 py-2 text-slate-700">{libelleModule(e.module)}</td>
+                <td className="px-3 py-2">
+                  <Badge couleur={COULEURS_ACTION[e.action] ?? 'slate'}>{LIBELLES_ACTION[e.action] ?? e.action}</Badge>
+                </td>
+                <td className="px-3 py-2 text-slate-700">{resoudreCible(e, referentiels)}</td>
+                <td className="px-3 py-2 font-mono text-xs text-slate-500">{e.adresseIp ?? '—'}</td>
+                <td className="px-3 py-2 text-right">
+                  {(e.valeurApres !== null || e.valeurAvant !== null) && (
+                    <button
+                      onClick={() => setEntreeSelectionnee(e)}
+                      className="font-medium text-primary-700 transition-colors duration-200 hover:underline"
+                    >
+                      Détail
+                    </button>
+                  )}
+                </td>
+              </tr>
             ))}
-          </div>
-        ) : entrees.length > 0 ? (
-          <>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
-                  <th className="px-4 py-3">Quand</th>
-                  <th className="px-4 py-3">Qui</th>
-                  <th className="px-4 py-3">Module</th>
-                  <th className="px-4 py-3">Action</th>
-                  <th className="px-4 py-3">Adresse IP</th>
-                  <th className="px-4 py-3" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {entrees.map((e) => (
-                  <tr key={e.id} className="transition-colors duration-200 hover:bg-slate-50">
-                    <td className="px-4 py-3 text-slate-600">{formaterHorodatage(e.createdAt)}</td>
-                    <td className="px-4 py-3 text-slate-700">{e.utilisateurEmail ?? '—'}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-slate-600">{e.module}</td>
-                    <td className="px-4 py-3">
-                      <Badge couleur={COULEURS_ACTION[e.action] ?? 'slate'}>{LIBELLES_ACTION[e.action] ?? e.action}</Badge>
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs text-slate-500">{e.adresseIp ?? '—'}</td>
-                    <td className="px-4 py-3 text-right">
-                      {(e.valeurApres !== null || e.valeurAvant !== null) && (
-                        <button
-                          onClick={() => setEntreeSelectionnee(e)}
-                          className="font-medium text-primary-700 transition-colors duration-200 hover:underline"
-                        >
-                          Détail
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <Pagination page={page} totalPages={totalPages} onChange={setPage} totalItems={total} parPage={PAR_PAGE} />
-          </>
-        ) : (
-          <EtatVide icone={<IconeAudit />} titre="Aucune action enregistrée" message="Le journal se remplit au fil des actions effectuées dans le SIRH." />
-        )}
-      </div>
+          </tbody>
+        </table>
+      </Table>
 
       {entreeSelectionnee && (
         <Modale titre="Détail de l'action" onFermer={() => setEntreeSelectionnee(null)}>
           <div className="space-y-3 text-sm">
             <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Entité</p>
-              <p className="font-mono text-xs text-slate-700">{entreeSelectionnee.entiteId ?? '—'}</p>
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Cible</p>
+              <p className="text-sm text-slate-700">{resoudreCible(entreeSelectionnee, referentiels)}</p>
+              {entreeSelectionnee.entiteId && (
+                <p className="font-mono text-xs text-slate-400">{entreeSelectionnee.entiteId}</p>
+              )}
             </div>
             {entreeSelectionnee.valeurAvant !== null && (
               <div>

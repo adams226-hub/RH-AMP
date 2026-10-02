@@ -12,13 +12,17 @@ interface ContexteAuth {
   jeton: string | null;
   role: CodeRole | null;
   employeId: string | null;
-  connecte: (jeton: string) => void;
+  email: string | null;
+  connecte: (jeton: string, email: string) => void;
   deconnecter: () => void;
 }
 
 const ContexteAuthentification = createContext<ContexteAuth | undefined>(undefined);
 
 const CLE_STOCKAGE = 'sirh_jeton';
+// Le JWT ne porte que l'id utilisateur et le rôle (pas d'email/nom) — mémorisé à part au login
+// pour l'afficher dans la barre supérieure, sans appel backend supplémentaire.
+const CLE_STOCKAGE_EMAIL = 'sirh_email';
 
 function decoderPayload(jeton: string): PayloadJwt | null {
   try {
@@ -31,6 +35,7 @@ function decoderPayload(jeton: string): PayloadJwt | null {
 
 export function FournisseurAuth({ children }: { children: ReactNode }) {
   const [jeton, setJeton] = useState<string | null>(() => localStorage.getItem(CLE_STOCKAGE));
+  const [email, setEmail] = useState<string | null>(() => localStorage.getItem(CLE_STOCKAGE_EMAIL));
 
   useEffect(() => {
     if (jeton) {
@@ -40,6 +45,14 @@ export function FournisseurAuth({ children }: { children: ReactNode }) {
     }
   }, [jeton]);
 
+  useEffect(() => {
+    if (email) {
+      localStorage.setItem(CLE_STOCKAGE_EMAIL, email);
+    } else {
+      localStorage.removeItem(CLE_STOCKAGE_EMAIL);
+    }
+  }, [email]);
+
   const payload = useMemo(() => (jeton ? decoderPayload(jeton) : null), [jeton]);
 
   return (
@@ -48,8 +61,15 @@ export function FournisseurAuth({ children }: { children: ReactNode }) {
         jeton,
         role: payload?.role ?? null,
         employeId: payload?.employeId ?? null,
-        connecte: setJeton,
-        deconnecter: () => setJeton(null),
+        email,
+        connecte: (nouveauJeton, nouvelEmail) => {
+          setJeton(nouveauJeton);
+          setEmail(nouvelEmail);
+        },
+        deconnecter: () => {
+          setJeton(null);
+          setEmail(null);
+        },
       }}
     >
       {children}

@@ -72,6 +72,8 @@ export function Missions() {
 
   const [missionRetour, setMissionRetour] = useState<MissionAvecEmploye | null>(null);
   const [dateRetourReelle, setDateRetourReelle] = useState('');
+  const [fraisHebergement, setFraisHebergement] = useState('0');
+  const [fraisRestauration, setFraisRestauration] = useState('0');
 
   function rafraichir() {
     if (!jeton) return;
@@ -171,6 +173,10 @@ export function Missions() {
     setEnAttenteId(missionRetour.id);
     try {
       await api.enregistrerRetourMission(jeton, missionRetour.id, dateRetourReelle);
+      await api.modifierFraisMission(jeton, missionRetour.id, {
+        montantHebergement: Number(fraisHebergement),
+        montantRestauration: Number(fraisRestauration),
+      });
       setMissionRetour(null);
       setDateRetourReelle('');
       rafraichir();
@@ -336,6 +342,8 @@ export function Missions() {
                           onClick={() => {
                             setMissionRetour(m);
                             setDateRetourReelle(new Date().toISOString().slice(0, 10));
+                            setFraisHebergement(String(m.montantHebergement));
+                            setFraisRestauration(String(m.montantRestauration));
                           }}
                           className="font-medium text-primary-700 transition-colors duration-200 hover:underline disabled:opacity-50"
                         >
@@ -377,6 +385,32 @@ export function Missions() {
                 required
                 className={`w-full ${CHAMP}`}
               />
+            </div>
+            <p className="text-xs text-slate-500">
+              Si le séjour a duré plus (ou moins) longtemps que prévu, ajuste les frais ici — aucun recalcul
+              automatique n'est fait, à toi de saisir le bon montant.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-600">Hébergement (F CFA)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={fraisHebergement}
+                  onChange={(e) => setFraisHebergement(e.target.value)}
+                  className={`w-full ${CHAMP}`}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-600">Restauration (F CFA)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={fraisRestauration}
+                  onChange={(e) => setFraisRestauration(e.target.value)}
+                  className={`w-full ${CHAMP}`}
+                />
+              </div>
             </div>
             <button disabled={enAttenteId === missionRetour.id} className={BOUTON}>
               {enAttenteId === missionRetour.id ? 'Envoi...' : 'Confirmer le retour'}

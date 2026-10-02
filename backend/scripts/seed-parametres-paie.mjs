@@ -35,7 +35,8 @@ const parametres = [
   ['taux_cnss_patronale', 0.16],
   ['taux_tpa', 0.03],
   ['taux_fsp', 0.01],
-  ['taux_abattement', 0.2],
+  ['taux_abattement_cadre', 0.2],
+  ['taux_abattement_non_cadre', 0.25],
   // Placeholder à configurer par le Super Admin (Paramètres > Paie) — pas de valeur
   // confirmée à ce jour, cf. SPEC_MODULE_POINTAGE_AMP.md.
   ['taux_panier_jour', 0],

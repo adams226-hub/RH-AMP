@@ -3,7 +3,9 @@ import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, X
 import { EtatVide } from '../EtatVide';
 import { IconePaie } from '../icones';
 import { MasseSalarialeMois } from '../../types/tableauDeBord';
-import { couleurPour } from './paletteCategorielle';
+import { couleurPourFiliale } from './paletteCategorielle';
+import { formaterMoisFr } from '../../utils/date';
+import { dureeAnimationGraphique } from '../../utils/reducedMotion';
 
 function formaterFCFACourt(valeur: number) {
   if (valeur >= 1_000_000) return `${(valeur / 1_000_000).toFixed(1)} M`;
@@ -33,7 +35,7 @@ export function GraphiqueMasseSalariale({ mois }: { mois: MasseSalarialeMois[] }
   const auMoinsUneValeur = mois.some((m) => m.total > 0);
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="anim-cascade min-w-0 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:shadow-md">
       <h3 className="mb-4 text-sm font-semibold text-slate-800">Masse salariale mensuelle par société</h3>
       {!auMoinsUneValeur ? (
         <EtatVide icone={<IconePaie />} titre="Aucun bulletin sur la période" message="Calculez des bulletins de paie pour voir la courbe se remplir." />
@@ -41,7 +43,13 @@ export function GraphiqueMasseSalariale({ mois }: { mois: MasseSalarialeMois[] }
         <ResponsiveContainer width="100%" height={280}>
           <LineChart data={donnees} margin={{ top: 4, right: 16, bottom: 4, left: 4 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-            <XAxis dataKey="periode" tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} />
+            <XAxis
+              dataKey="periode"
+              tickFormatter={formaterMoisFr}
+              tick={{ fontSize: 12, fill: '#94a3b8' }}
+              axisLine={{ stroke: '#e2e8f0' }}
+              tickLine={false}
+            />
             <YAxis
               tickFormatter={formaterFCFACourt}
               tick={{ fontSize: 12, fill: '#94a3b8' }}
@@ -50,19 +58,21 @@ export function GraphiqueMasseSalariale({ mois }: { mois: MasseSalarialeMois[] }
               width={48}
             />
             <Tooltip
+              labelFormatter={(label) => (typeof label === 'string' ? formaterMoisFr(label) : label)}
               formatter={(valeur) => (typeof valeur === 'number' ? `${valeur.toLocaleString('fr-FR')} F CFA` : String(valeur))}
-              contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }}
+              contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
             />
             <Legend wrapperStyle={{ fontSize: 12 }} />
-            {societes.map((societe, index) => (
+            {societes.map((societe) => (
               <Line
                 key={societe}
                 type="monotone"
                 dataKey={societe}
-                stroke={couleurPour(index)}
+                stroke={couleurPourFiliale(societe)}
                 strokeWidth={2}
                 dot={{ r: 3 }}
                 activeDot={{ r: 5 }}
+                animationDuration={dureeAnimationGraphique(400)}
               />
             ))}
           </LineChart>

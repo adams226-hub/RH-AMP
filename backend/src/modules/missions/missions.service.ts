@@ -96,6 +96,26 @@ export async function creerMission(donnees: CreationMission): Promise<Mission> {
   return mapMission(rows[0]);
 }
 
+// Ajustement manuel des frais (hébergement/restauration) après création — ex. mission prolongée
+// au-delà du retour prévu. Décision produit explicite : pas de recalcul automatique à partir de la
+// durée réelle, c'est le RH qui saisit lui-même le nouveau montant.
+export async function modifierFrais(
+  id: string,
+  donnees: { montantHebergement: number; montantRestauration: number }
+): Promise<Mission> {
+  const { rows } = await pool.query(
+    `UPDATE missions SET montant_hebergement = $2, montant_restauration = $3, updated_at = now()
+     WHERE id = $1 RETURNING *`,
+    [id, donnees.montantHebergement, donnees.montantRestauration]
+  );
+
+  if (!rows[0]) {
+    throw new ErreurApplicative(404, 'Mission introuvable');
+  }
+
+  return mapMission(rows[0]);
+}
+
 export async function enregistrerRetour(id: string, dateRetourReelle: string): Promise<Mission> {
   const { rows } = await pool.query(
     `UPDATE missions SET date_retour_reelle = $2, updated_at = now() WHERE id = $1 RETURNING *`,

@@ -37,11 +37,6 @@ export const CONSTANTES_PAIE_2026 = {
     sujetionAstreinteFonction: { plafondFcfa: 50_000, tauxSurBrutPourcent: 5 },
   },
 
-  abattementForfaitairePourcent: {
-    CADRE: 20,
-    NON_CADRE: 25,
-  },
-
   // "cumulDebutTranche" = IUTS déjà dû pour tous les francs situés SOUS seuilBas
   // (vérifié cohérent avec le barème précédemment validé — cf. points signalés).
   baremeIUTS: [
@@ -57,9 +52,17 @@ export const CONSTANTES_PAIE_2026 = {
   // Non spécifié au-delà de 4 personnes à charge (AMBIGUÏTÉ SIGNALÉE ci-dessus) —
   // la dernière valeur connue (4 charges) est utilisée en plafond.
   abattementChargesIUTSPourcent: { 0: 0, 1: 8, 2: 10, 3: 12, 4: 14 } as Record<number, number>,
-
-  tauxFSPPourcent: 1,
 } as const;
+
+// Taux configurables depuis Paramètres > Paramètres de paie (table parametres_paie), plus aucun
+// codé en dur ici — cf. échange utilisateur "ne code pas en dur, mets ça dans paramètre". Fractions
+// (0.01 = 1%), pas des pourcentages, par cohérence avec taux_cnss_patronale/taux_tpa déjà gérés
+// ainsi dans paie.ts.
+export interface TauxConfigurables {
+  tauxFSP: number;
+  tauxAbattementCadre: number;
+  tauxAbattementNonCadre: number;
+}
 
 // ----------------------------------------------------------------------------
 // TYPES
@@ -340,17 +343,16 @@ function calculerExonerationsIndemnites(
 // composantes proratisables (salaire de base, sursalaire) sont donc utilisées
 // dans leur version proratisée.
 function calculerAbattementForfaitaire(
-  categorie: Categorie,
+  tauxAbattement: number,
   salaireDeBaseProratise: number,
   primeAnciennete: number,
   totalHeuresSup: number,
   sursalaireProratise: number,
   heuresSupplementairesForfaitaires: number
 ): number {
-  const tauxPourcent = CONSTANTES_PAIE_2026.abattementForfaitairePourcent[categorie];
   const assiette =
     salaireDeBaseProratise + primeAnciennete + totalHeuresSup + sursalaireProratise + heuresSupplementairesForfaitaires;
-  return arrondi0(assiette * (tauxPourcent / 100));
+  return arrondi0(assiette * tauxAbattement);
 }
 
 // Règle : "ROUND(Salaire brut − Abattement forfaitaire − Somme des exonérations
@@ -392,9 +394,9 @@ function calculerSalaireNet(remunerationTotale: number, retenueCNSS: number, iut
   return remunerationTotale - (retenueCNSS + iutsNet);
 }
 
-// Règle : "Retenue FSP = ROUND(salaire_net × 1%, 0)."
-function calculerRetenueFSP(salaireNet: number): number {
-  return arrondi0(salaireNet * (CONSTANTES_PAIE_2026.tauxFSPPourcent / 100));
+// Règle : "Retenue FSP = ROUND(salaire_net × taux_fsp, 0)" — taux configurable (Paramètres > Paie).
+function calculerRetenueFSP(salaireNet: number, tauxFSP: number): number {
+  return arrondi0(salaireNet * tauxFSP);
 }
 
 // Règle : "Net à payer = (Salaire net − Retenue 1% − Retenues avances du mois −
@@ -416,7 +418,11 @@ function calculerNetAPayer(
 // COMPOSITION — chaîne de calcul dans l'ordre exact décrit par les règles
 // ----------------------------------------------------------------------------
 
-export function calculerBulletinPaie(employe: Employe, elementsVariables: ElementsVariables): BulletinPaie {
+export function calculerBulletinPaie(
+  employe: Employe,
+  elementsVariables: ElementsVariables,
+  tauxConfigurables: TauxConfigurables
+): BulletinPaie {
   const dateReference = elementsVariables.dateReference ?? new Date();
   const panier = elementsVariables.panier ?? 0; // cf. AMBIGUÏTÉ SIGNALÉE sur "panier"
   const primeSalissure = elementsVariables.primeSalissure ?? 0;
@@ -465,8 +471,10 @@ export function calculerBulletinPaie(employe: Employe, elementsVariables: Elemen
   );
 
   // 8. Abattement forfaitaire (sur montants proratisés)
+  const tauxAbattement =
+    employe.categorie === 'CADRE' ? tauxConfigurables.tauxAbattementCadre : tauxConfigurables.tauxAbattementNonCadre;
   const abattementForfaitaire = calculerAbattementForfaitaire(
-    employe.categorie,
+    tauxAbattement,
     elementsProratises.salaireDeBase,
     primeAnciennete,
     totalHeuresSupplementaires,
@@ -495,7 +503,7 @@ export function calculerBulletinPaie(employe: Employe, elementsVariables: Elemen
   const salaireNet = calculerSalaireNet(remunerationTotale, retenueCNSS, iutsNet);
 
   // 14. FSP
-  const retenueFSP = calculerRetenueFSP(salaireNet);
+  const retenueFSP = calculerRetenueFSP(salaireNet, tauxConfigurables.tauxFSP);
 
   // 15. Net à payer
   const netAPayer = calculerNetAPayer(
@@ -663,6 +671,7 @@ export function calculerBrutDepuisNet(
   netCible: number,
   employe: Employe,
   elementsVariables: ElementsVariables,
+  tauxConfigurables: TauxConfigurables,
   champVariable: ChampVariable = 'salaireDeBase',
   tolerance: number = 1
 ): ResultatCalculInverse {
@@ -674,7 +683,7 @@ export function calculerBrutDepuisNet(
   for (let i = 0; i < 50; i++) {
     valeur = (borneBasse + borneHaute) / 2;
     const employeEssai: Employe = { ...employe, [champVariable]: valeur };
-    bulletin = calculerBulletinPaie(employeEssai, elementsVariables);
+    bulletin = calculerBulletinPaie(employeEssai, elementsVariables, tauxConfigurables);
 
     // Cible = salaire net (avant la retenue FSP de 1%), pas le net à payer final — c'est ce que
     // désigne "un net de X" côté RH/recrutement (net à payer n'est qu'une étape ultérieure).

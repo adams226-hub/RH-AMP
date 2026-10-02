@@ -12,6 +12,7 @@ import {
   calculerBulletinPaie,
   Categorie,
   LigneHeureSupplementaire,
+  TauxConfigurables,
 } from './calculerBulletinPaie';
 import { genererBulletinPdf } from './paie.pdf';
 
@@ -172,6 +173,17 @@ export async function obtenirParametre(cle: string): Promise<number> {
   }
 
   return Number(rows[0].valeur);
+}
+
+// FSP et abattement forfaitaire (cadre/non-cadre) — configurables depuis Paramètres > Paramètres
+// de paie, plus aucune valeur codée en dur dans le moteur de calcul (calculerBulletinPaie.ts).
+async function obtenirTauxConfigurables(): Promise<TauxConfigurables> {
+  const [tauxFSP, tauxAbattementCadre, tauxAbattementNonCadre] = await Promise.all([
+    obtenirParametre('taux_fsp'),
+    obtenirParametre('taux_abattement_cadre'),
+    obtenirParametre('taux_abattement_non_cadre'),
+  ]);
+  return { tauxFSP, tauxAbattementCadre, tauxAbattementNonCadre };
 }
 
 interface ContratPourPaie {
@@ -508,6 +520,7 @@ export async function calculerEtEnregistrerBulletin(elements: ElementsCalculBull
     const contrat = await obtenirContratActif(elements.employeId);
     const joursAbsenceInjustifiee = Number(parType.get('absence_injustifiee')?.total_jours ?? 0);
     const joursPrisEnCompte = Math.max(0, 30 - joursAbsenceInjustifiee);
+    const tauxConfigurables = await obtenirTauxConfigurables();
 
     const resultat = calculerBulletinPaie(
       {
@@ -544,7 +557,8 @@ export async function calculerEtEnregistrerBulletin(elements: ElementsCalculBull
         panier: montantDuType('panier'),
         primeSalissure: montantDuType('prime_salissure'),
         primeLait: montantDuType('prime_lait'),
-      }
+      },
+      tauxConfigurables
     );
 
     valeurs = {
@@ -730,6 +744,7 @@ export async function simulerNetVersBrut(donnees: SimulationNetVersBrut): Promis
   const dateReference = new Date();
   const dateEntree = new Date(dateReference);
   dateEntree.setFullYear(dateEntree.getFullYear() - (donnees.ancienneteAnnees ?? 0));
+  const tauxConfigurables = await obtenirTauxConfigurables();
 
   const resultat = calculerBrutDepuisNet(
     donnees.netCible,
@@ -761,6 +776,7 @@ export async function simulerNetVersBrut(donnees: SimulationNetVersBrut): Promis
       panier: donnees.panier ?? 0,
       dateReference,
     },
+    tauxConfigurables,
     donnees.champVariable ?? 'salaireDeBase'
   );
 

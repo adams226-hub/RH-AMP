@@ -15,6 +15,11 @@ export interface FiltresAudit {
   utilisateurId?: string;
   module?: string;
   action?: string;
+  /** Recherche texte libre — sur l'email de l'utilisateur ou l'identifiant de l'entité concernée. */
+  recherche?: string;
+  /** Bornes de période sur created_at (dates au format AAAA-MM-JJ), inclusives. */
+  dateDebut?: string;
+  dateFin?: string;
   page: number;
   parPage: number;
 }

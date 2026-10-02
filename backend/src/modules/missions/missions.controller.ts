@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import { chantiersAutorisesPour, filialesAutoriseesPour } from '../../middleware/autorisation';
 import { genererExportExcelMissions } from './missions.excel';
-import { creerMission, enregistrerRetour, listerMissions } from './missions.service';
+import { creerMission, enregistrerRetour, listerMissions, modifierFrais } from './missions.service';
 
 const schemaCreationMission = z.object({
   employeId: z.string().uuid(),
@@ -17,6 +17,11 @@ const schemaCreationMission = z.object({
 
 const schemaRetour = z.object({
   dateRetourReelle: z.string(),
+});
+
+const schemaFrais = z.object({
+  montantHebergement: z.number().nonnegative(),
+  montantRestauration: z.number().nonnegative(),
 });
 
 export async function lister(req: Request, res: Response) {
@@ -46,4 +51,9 @@ export async function creer(req: Request, res: Response) {
 export async function retour(req: Request, res: Response) {
   const { dateRetourReelle } = schemaRetour.parse(req.body);
   res.json(await enregistrerRetour(req.params.id, dateRetourReelle));
+}
+
+export async function frais(req: Request, res: Response) {
+  const donnees = schemaFrais.parse(req.body);
+  res.json(await modifierFrais(req.params.id, donnees));
 }

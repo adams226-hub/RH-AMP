@@ -2,7 +2,14 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import { definirParametrePaie, listerParametresPaie } from './parametresPaie.service';
 
-const CLES = ['taux_cnss_patronale', 'taux_tpa', 'taux_fsp', 'taux_abattement', 'taux_panier_jour'] as const;
+const CLES = [
+  'taux_cnss_patronale',
+  'taux_tpa',
+  'taux_fsp',
+  'taux_abattement_cadre',
+  'taux_abattement_non_cadre',
+  'taux_panier_jour',
+] as const;
 
 // taux_panier_jour est un montant en F CFA (pas un taux entre 0 et 1, contrairement aux autres
 // clés) — plafond large plutôt qu'une validation par clé, pour rester simple.

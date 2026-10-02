@@ -2,11 +2,26 @@
 // inverse (ADDENDUM_CALCUL_INVERSE_PAIE_AMP.md §6), sur les 2 bulletins réels déjà
 // vérifiés au franc CFA près en conversation (ZALE IDRISSA, ILI ADAMA).
 import { describe, expect, test } from 'vitest';
-import { calculerBrutDepuisNet, calculerBulletinPaie, Employe, ElementsVariables } from './calculerBulletinPaie';
+import {
+  calculerBrutDepuisNet,
+  calculerBulletinPaie,
+  Employe,
+  ElementsVariables,
+  TauxConfigurables,
+} from './calculerBulletinPaie';
 
 // dateEntree = dateReference : ancienneté forcée à 0, indépendamment de la date d'exécution
 // du test — les deux employés réels avaient une ancienneté nulle au moment des bulletins.
 const DATE_REFERENCE = new Date(2026, 6, 31);
+
+// Valeurs historiquement codées en dur dans le moteur, désormais configurables (Paramètres >
+// Paramètres de paie) — reprises ici telles quelles pour que ces tests de non-régression
+// continuent de vérifier les mêmes bulletins réels au franc CFA près.
+const TAUX_CONNUS: TauxConfigurables = {
+  tauxFSP: 0.01,
+  tauxAbattementCadre: 0.2,
+  tauxAbattementNonCadre: 0.25,
+};
 
 const ELEMENTS_SANS_AJUSTEMENT: ElementsVariables = {
   joursPrisEnCompte: 30,
@@ -37,7 +52,7 @@ describe('calculerBulletinPaie — bulletins réels', () => {
       personnesACharge: 2,
     };
 
-    const resultat = calculerBulletinPaie(employe, ELEMENTS_SANS_AJUSTEMENT);
+    const resultat = calculerBulletinPaie(employe, ELEMENTS_SANS_AJUSTEMENT, TAUX_CONNUS);
 
     expect(resultat.retenueCNSS).toBeCloseTo(4235, 0);
     expect(resultat.netAPayer).toBeCloseTo(69440, 0);
@@ -58,7 +73,7 @@ describe('calculerBulletinPaie — bulletins réels', () => {
       personnesACharge: 0,
     };
 
-    const resultat = calculerBulletinPaie(employe, { ...ELEMENTS_SANS_AJUSTEMENT, panier: 23400 });
+    const resultat = calculerBulletinPaie(employe, { ...ELEMENTS_SANS_AJUSTEMENT, panier: 23400 }, TAUX_CONNUS);
 
     expect(resultat.retenueCNSS).toBeCloseTo(12437, 0);
     expect(resultat.iutsNet).toBeCloseTo(17580, 0);
@@ -82,7 +97,7 @@ describe('calculerBrutDepuisNet — calcul inverse (ADDENDUM §6)', () => {
       personnesACharge: 2,
     };
 
-    const resultat = calculerBrutDepuisNet(69440, employeSansBase, ELEMENTS_SANS_AJUSTEMENT, 'salaireDeBase', 0.1);
+    const resultat = calculerBrutDepuisNet(69440, employeSansBase, ELEMENTS_SANS_AJUSTEMENT, TAUX_CONNUS, 'salaireDeBase', 0.1);
 
     expect(resultat.convergence).toBe(true);
     expect(resultat.bulletin.netAPayer).toBeCloseTo(69440, 0);
@@ -113,6 +128,7 @@ describe('calculerBrutDepuisNet — calcul inverse (ADDENDUM §6)', () => {
       217323,
       employeSansBase,
       { ...ELEMENTS_SANS_AJUSTEMENT, panier: 23400 },
+      TAUX_CONNUS,
       'salaireDeBase',
       0.1
     );
