@@ -77,6 +77,7 @@ function mapPointageMensuel(l: Record<string, unknown>): PointageMensuel {
     heuresHs35: Number(l.heures_hs_35),
     heuresHs60: Number(l.heures_hs_60),
     joursPanier: Number(l.jours_panier),
+    joursTravailles: Number(l.jours_travailles),
     nbJoursAbsenceInjustifiee: Number(l.nb_jours_absence_injustifiee),
     nbJoursReposMedical: Number(l.nb_jours_repos_medical),
     nbJoursPermissionNonPayee: Number(l.nb_jours_permission_non_payee),
@@ -219,8 +220,9 @@ async function recalculerEtEnregistrerTotaux(client: PoolClient, fiche: Pointage
   const { rows } = await client.query(
     `UPDATE pointages_mensuels SET
        heures_hs_15 = $2, heures_hs_35 = $3, heures_hs_60 = $4, jours_panier = $5,
-       nb_jours_absence_injustifiee = $6, nb_jours_repos_medical = $7, nb_jours_permission_non_payee = $8,
-       nb_jours_permission_payee = $9, nb_jours_conge_annuel = $10, updated_at = now()
+       jours_travailles = $6,
+       nb_jours_absence_injustifiee = $7, nb_jours_repos_medical = $8, nb_jours_permission_non_payee = $9,
+       nb_jours_permission_payee = $10, nb_jours_conge_annuel = $11, updated_at = now()
      WHERE id = $1 RETURNING *`,
     [
       fiche.id,
@@ -228,6 +230,7 @@ async function recalculerEtEnregistrerTotaux(client: PoolClient, fiche: Pointage
       totaux.heuresHs35,
       totaux.heuresHs60,
       totaux.joursPanier,
+      totaux.joursTravailles,
       totaux.nbJoursAbsenceInjustifiee,
       totaux.nbJoursReposMedical,
       totaux.nbJoursPermissionNonPayee,

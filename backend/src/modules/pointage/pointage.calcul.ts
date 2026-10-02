@@ -24,6 +24,10 @@ export interface ResultatCalculPointage {
   heuresHs35: number;
   heuresHs60: number;
   joursPanier: number;
+  // Nombre de jours où l'employé a effectivement pointé des heures (par opposition à jours_panier,
+  // qui ne compte que les jours ≥ 10h) — sert de base au calcul de paie des employés rémunérés au
+  // jour (sans contrat), cf. taux_journaliers / calculerBulletinJournalier.
+  joursTravailles: number;
   nbJoursAbsenceInjustifiee: number;
   nbJoursReposMedical: number;
   nbJoursPermissionNonPayee: number;
@@ -50,6 +54,7 @@ export function calculerPointageDepuisJours(
 ): ResultatCalculPointage {
   const semaines = new Map<string, { horsDimancheFerie: number; dimancheFerie: number }>();
   let joursPanier = 0;
+  let joursTravailles = 0;
 
   const compteursAbsence: Record<CodeAbsencePointage, number> = {
     absence_injustifiee: 0,
@@ -67,6 +72,7 @@ export function calculerPointageDepuisJours(
     }
     if (jour.heures === null || jour.heures === undefined) continue;
 
+    joursTravailles += 1;
     if (jour.heures >= SEUIL_PANIER_HEURES) joursPanier += 1;
 
     const cle = cleSemaine(jour.date);
@@ -98,6 +104,7 @@ export function calculerPointageDepuisJours(
     heuresHs35,
     heuresHs60,
     joursPanier,
+    joursTravailles,
     nbJoursAbsenceInjustifiee: compteursAbsence.absence_injustifiee,
     nbJoursReposMedical: compteursAbsence.repos_medical,
     nbJoursPermissionNonPayee: compteursAbsence.permission_non_payee,

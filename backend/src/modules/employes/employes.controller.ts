@@ -7,10 +7,12 @@ import {
   changerStatutEmploye,
   creerEmploye,
   definirSoumisPointage,
+  definirTauxJournalier,
   listerEmployes,
   modifierEmploye,
   obtenirEmploye,
   obtenirResumeRhEmploye,
+  obtenirTauxJournalier,
 } from './employes.service';
 
 const schemaStatut = z
@@ -30,6 +32,17 @@ const schemaChantier = z.object({
 
 const schemaSoumisPointage = z.object({
   soumisPointage: z.boolean(),
+});
+
+const schemaRemunereAuJour = z.object({
+  remunereAuJour: z.boolean(),
+});
+
+const schemaTauxJournalier = z.object({
+  salaireBaseMensuel: z.number().nonnegative(),
+  indemniteTransportMensuel: z.number().nonnegative(),
+  primeLaitMensuel: z.number().nonnegative(),
+  primeSalissureMensuel: z.number().nonnegative(),
 });
 
 const schemaCreationEmploye = z.object({
@@ -54,6 +67,7 @@ const schemaCreationEmploye = z.object({
   dateEmbauche: z.string(),
   categorieProfessionnelle: z.string().min(1).optional(),
   soumisPointage: z.boolean().optional(),
+  remunereAuJour: z.boolean().optional(),
   situationMatrimoniale: z.string().optional(),
   groupeSanguin: z.string().optional(),
   contactUrgenceNom: z.string().optional(),
@@ -145,4 +159,28 @@ export async function affecterChantier(req: Request, res: Response) {
 export async function changerSoumisPointage(req: Request, res: Response) {
   const { soumisPointage } = schemaSoumisPointage.parse(req.body);
   res.json(await definirSoumisPointage(req.params.id, soumisPointage));
+}
+
+export async function changerRemunereAuJour(req: Request, res: Response) {
+  const { remunereAuJour } = schemaRemunereAuJour.parse(req.body);
+  res.json(await modifierEmploye(req.params.id, { remunereAuJour }));
+}
+
+export async function tauxJournalierObtenir(req: Request, res: Response) {
+  const employe = await obtenirEmploye(req.params.id);
+  if (!employe) {
+    throw new ErreurApplicative(404, 'Employé introuvable');
+  }
+  await verifierAccesEmploye(req, employe.filialeId, employe.chantierId);
+  res.json(await obtenirTauxJournalier(req.params.id));
+}
+
+export async function tauxJournalierDefinir(req: Request, res: Response) {
+  const employe = await obtenirEmploye(req.params.id);
+  if (!employe) {
+    throw new ErreurApplicative(404, 'Employé introuvable');
+  }
+  await verifierAccesEmploye(req, employe.filialeId, employe.chantierId);
+  const donnees = schemaTauxJournalier.parse(req.body);
+  res.json(await definirTauxJournalier(req.params.id, donnees));
 }

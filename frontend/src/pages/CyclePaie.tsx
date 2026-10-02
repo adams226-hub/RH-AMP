@@ -237,6 +237,13 @@ export function CyclePaie() {
                   <button disabled={action !== null} onClick={() => telecharger('mode_paiement')} className={BOUTON_SECONDAIRE}>
                     {action === 'journal-groupe' ? 'Génération...' : 'Générer par mode de paiement'}
                   </button>
+                  <button
+                    disabled={action !== null}
+                    onClick={() => executer('recalculer', () => api.lancerCalculCyclePaie(jeton!, filialeId, `${periode}-01`))}
+                    className={BOUTON_SECONDAIRE}
+                  >
+                    {action === 'recalculer' ? 'Calcul en cours...' : 'Recalculer'}
+                  </button>
                 </>
               )}
 

@@ -1,6 +1,14 @@
 import { pool } from '../../config/db';
 import { ErreurApplicative } from '../../middleware/gestionErreurs';
-import { CreationEmploye, Employe, ModificationEmploye, ResumeRhEmploye, StatutEmploye } from './employes.types';
+import {
+  CreationEmploye,
+  Employe,
+  ModificationEmploye,
+  ResumeRhEmploye,
+  SaisieTauxJournalier,
+  StatutEmploye,
+  TauxJournalier,
+} from './employes.types';
 
 // Correspondance champ (camelCase, API) -> colonne (snake_case, base) pour la mise à jour
 // partielle de modifierEmploye — seuls les champs présents dans le corps de la requête sont
@@ -27,6 +35,7 @@ const COLONNES_MODIFIABLES: Record<keyof ModificationEmploye, string> = {
   dateEmbauche: 'date_embauche',
   categorieProfessionnelle: 'categorie_professionnelle',
   soumisPointage: 'soumis_pointage',
+  remunereAuJour: 'remunere_au_jour',
   situationMatrimoniale: 'situation_matrimoniale',
   groupeSanguin: 'groupe_sanguin',
   contactUrgenceNom: 'contact_urgence_nom',
@@ -64,6 +73,7 @@ function mapLigne(ligne: Record<string, unknown>): Employe {
     motifSortie: ligne.motif_sortie as string | null,
     categorieProfessionnelle: ligne.categorie_professionnelle as Employe['categorieProfessionnelle'],
     soumisPointage: ligne.soumis_pointage as boolean,
+    remunereAuJour: ligne.remunere_au_jour as boolean,
     situationMatrimoniale: ligne.situation_matrimoniale as string | null,
     groupeSanguin: ligne.groupe_sanguin as string | null,
     contactUrgenceNom: ligne.contact_urgence_nom as string | null,
@@ -178,10 +188,10 @@ export async function creerEmploye(donnees: CreationEmploye): Promise<Employe> {
        matricule, nom, prenoms, date_naissance, sexe, nationalite, telephone, num_cnib, num_cnss,
        rib, banque, mode_paiement, personnes_a_charge,
        filiale_id, departement_id, service_id, fonction_id, chantier_id, date_embauche, categorie_professionnelle,
-       soumis_pointage, situation_matrimoniale, groupe_sanguin,
+       soumis_pointage, remunere_au_jour, situation_matrimoniale, groupe_sanguin,
        contact_urgence_nom, contact_urgence_lien, contact_urgence_tel, contact_urgence_tel2, maladie_particuliere
      )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
      RETURNING *`,
     [
       donnees.matricule,
@@ -205,6 +215,7 @@ export async function creerEmploye(donnees: CreationEmploye): Promise<Employe> {
       donnees.dateEmbauche,
       donnees.categorieProfessionnelle ?? null,
       donnees.soumisPointage ?? false,
+      donnees.remunereAuJour ?? false,
       donnees.situationMatrimoniale ?? null,
       donnees.groupeSanguin ?? null,
       donnees.contactUrgenceNom ?? null,
@@ -303,4 +314,47 @@ export async function changerStatutEmploye(
   }
 
   return mapLigne(rows[0]);
+}
+
+function mapTauxJournalier(l: Record<string, unknown>): TauxJournalier {
+  return {
+    employeId: l.employe_id as string,
+    salaireBaseMensuel: Number(l.salaire_base_mensuel),
+    indemniteTransportMensuel: Number(l.indemnite_transport_mensuel),
+    primeLaitMensuel: Number(l.prime_lait_mensuel),
+    primeSalissureMensuel: Number(l.prime_salissure_mensuel),
+  };
+}
+
+export async function obtenirTauxJournalier(employeId: string): Promise<TauxJournalier | null> {
+  const { rows } = await pool.query('SELECT * FROM taux_journaliers WHERE employe_id = $1', [employeId]);
+  return rows[0] ? mapTauxJournalier(rows[0]) : null;
+}
+
+// Upsert (une seule ligne par employé, cf. contrainte UNIQUE employe_id) — pas d'historique de
+// date d'effet : les bulletins déjà calculés conservent leurs propres montants, indépendants
+// d'un changement de taux ultérieur (cf. commentaire de la table).
+export async function definirTauxJournalier(
+  employeId: string,
+  donnees: SaisieTauxJournalier
+): Promise<TauxJournalier> {
+  const { rows } = await pool.query(
+    `INSERT INTO taux_journaliers (employe_id, salaire_base_mensuel, indemnite_transport_mensuel, prime_lait_mensuel, prime_salissure_mensuel)
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (employe_id) DO UPDATE SET
+       salaire_base_mensuel = EXCLUDED.salaire_base_mensuel,
+       indemnite_transport_mensuel = EXCLUDED.indemnite_transport_mensuel,
+       prime_lait_mensuel = EXCLUDED.prime_lait_mensuel,
+       prime_salissure_mensuel = EXCLUDED.prime_salissure_mensuel,
+       updated_at = now()
+     RETURNING *`,
+    [
+      employeId,
+      donnees.salaireBaseMensuel,
+      donnees.indemniteTransportMensuel,
+      donnees.primeLaitMensuel,
+      donnees.primeSalissureMensuel,
+    ]
+  );
+  return mapTauxJournalier(rows[0]);
 }

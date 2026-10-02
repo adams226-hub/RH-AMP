@@ -13,7 +13,7 @@ import { Pagination } from '../components/Pagination';
 import { TuileStat } from '../components/TuileStat';
 import { useAuth } from '../context/AuthContext';
 import { useTri } from '../hooks/useTri';
-import { Employe, ResumeRhEmploye, StatutEmploye } from '../types/employe';
+import { Employe, ResumeRhEmploye, StatutEmploye, TauxJournalier } from '../types/employe';
 import { Chantier } from '../types/pointage';
 import { Filiale, Fonction } from '../types/postes';
 import { CategorieProfessionnelle } from '../types/categoriesProfessionnelles';
@@ -44,6 +44,7 @@ const ETAT_INITIAL = {
   dateEmbauche: '',
   categorieProfessionnelle: '',
   soumisPointage: false,
+  remunereAuJour: false,
   situationMatrimoniale: '',
   groupeSanguin: '',
   contactUrgenceNom: '',
@@ -76,6 +77,15 @@ export function Employes() {
   const [chantiers, setChantiers] = useState<Chantier[]>([]);
   const [chantierEnCours, setChantierEnCours] = useState(false);
   const [pointageEnCours, setPointageEnCours] = useState(false);
+  const [remunereAuJourEnCours, setRemunereAuJourEnCours] = useState(false);
+  const [tauxJournalier, setTauxJournalier] = useState<TauxJournalier | null>(null);
+  const [tauxForm, setTauxForm] = useState({
+    salaireBaseMensuel: '0',
+    indemniteTransportMensuel: '0',
+    primeLaitMensuel: '0',
+    primeSalissureMensuel: '0',
+  });
+  const [tauxEnCours, setTauxEnCours] = useState(false);
   const [statutEnCours, setStatutEnCours] = useState(false);
   const [sortieOuverte, setSortieOuverte] = useState(false);
   const [dateSortieForm, setDateSortieForm] = useState('');
@@ -145,6 +155,22 @@ export function Employes() {
     api.obtenirResumeRhEmploye(jeton, employeSelectionne.id).then(setResumeRh);
   }, [jeton, employeSelectionne?.id]);
 
+  useEffect(() => {
+    if (!jeton || !employeSelectionne?.remunereAuJour) {
+      setTauxJournalier(null);
+      return;
+    }
+    api.obtenirTauxJournalier(jeton, employeSelectionne.id).then((taux) => {
+      setTauxJournalier(taux);
+      setTauxForm({
+        salaireBaseMensuel: String(taux?.salaireBaseMensuel ?? 0),
+        indemniteTransportMensuel: String(taux?.indemniteTransportMensuel ?? 0),
+        primeLaitMensuel: String(taux?.primeLaitMensuel ?? 0),
+        primeSalissureMensuel: String(taux?.primeSalissureMensuel ?? 0),
+      });
+    });
+  }, [jeton, employeSelectionne?.id, employeSelectionne?.remunereAuJour]);
+
   const categoriesVisibles = useMemo(() => categories.filter((c) => c.actif), [categories]);
   const fonctionsVisibles = useMemo(() => fonctions.filter((f) => f.actif), [fonctions]);
   const nomChantier = (id: string | null) => chantiers.find((c) => c.id === id)?.nom ?? null;
@@ -176,6 +202,39 @@ export function Employes() {
       setErreur(e instanceof ErreurApi ? e.message : "Erreur lors de la mise à jour du pointage");
     } finally {
       setPointageEnCours(false);
+    }
+  }
+
+  async function definirRemunereAuJourEmployeSelectionne(remunereAuJour: boolean) {
+    if (!jeton || !employeSelectionne) return;
+    setRemunereAuJourEnCours(true);
+    try {
+      const employe = await api.changerRemunereAuJourEmploye(jeton, employeSelectionne.id, remunereAuJour);
+      setEmployeSelectionne(employe);
+      rafraichir();
+    } catch (e) {
+      setErreur(e instanceof ErreurApi ? e.message : 'Erreur lors de la mise à jour');
+    } finally {
+      setRemunereAuJourEnCours(false);
+    }
+  }
+
+  async function enregistrerTauxJournalier(evenement: FormEvent) {
+    evenement.preventDefault();
+    if (!jeton || !employeSelectionne) return;
+    setTauxEnCours(true);
+    try {
+      const taux = await api.definirTauxJournalier(jeton, employeSelectionne.id, {
+        salaireBaseMensuel: Number(tauxForm.salaireBaseMensuel),
+        indemniteTransportMensuel: Number(tauxForm.indemniteTransportMensuel),
+        primeLaitMensuel: Number(tauxForm.primeLaitMensuel),
+        primeSalissureMensuel: Number(tauxForm.primeSalissureMensuel),
+      });
+      setTauxJournalier(taux);
+    } catch (e) {
+      setErreur(e instanceof ErreurApi ? e.message : "Erreur lors de l'enregistrement du taux journalier");
+    } finally {
+      setTauxEnCours(false);
     }
   }
 
@@ -250,6 +309,7 @@ export function Employes() {
       dateEmbauche: employe.dateEmbauche,
       categorieProfessionnelle: employe.categorieProfessionnelle ?? '',
       soumisPointage: employe.soumisPointage,
+      remunereAuJour: employe.remunereAuJour,
       situationMatrimoniale: employe.situationMatrimoniale ?? '',
       groupeSanguin: employe.groupeSanguin ?? '',
       contactUrgenceNom: employe.contactUrgenceNom ?? '',
@@ -560,6 +620,22 @@ export function Employes() {
                 Soumis au pointage
                 <span className="block text-xs font-normal text-slate-400">
                   La paie sera bloquée tant que sa fiche de pointage du mois n'est pas validée.
+                </span>
+              </label>
+            </div>
+            <div className="flex items-center gap-2 pt-5">
+              <input
+                type="checkbox"
+                id="remunereAuJour"
+                checked={champs.remunereAuJour}
+                onChange={(e) => majChamp('remunereAuJour', e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-primary-700 focus:ring-primary-100"
+              />
+              <label htmlFor="remunereAuJour" className="text-sm text-slate-700">
+                Rémunéré au jour (sans contrat)
+                <span className="block text-xs font-normal text-slate-400">
+                  Ouvrier payé uniquement pour les jours pointés — le taux journalier se règle sur
+                  sa fiche, après création.
                 </span>
               </label>
             </div>
@@ -948,6 +1024,81 @@ export function Employes() {
               </label>
             ) : (
               <dd className="mt-0.5 text-slate-800">{employeSelectionne.soumisPointage ? 'Oui' : 'Non'}</dd>
+            )}
+          </div>
+
+          <div className="mt-4 border-t border-slate-100 pt-4">
+            <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">Rémunéré au jour</dt>
+            {peutGerer ? (
+              <label className="mt-1.5 flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={employeSelectionne.remunereAuJour}
+                  onChange={(e) => definirRemunereAuJourEmployeSelectionne(e.target.checked)}
+                  disabled={remunereAuJourEnCours}
+                  className="h-4 w-4 rounded border-slate-300 text-primary-700 focus:ring-primary-100"
+                />
+                {employeSelectionne.remunereAuJour ? 'Oui — sans contrat, payé au jour pointé' : 'Non'}
+              </label>
+            ) : (
+              <dd className="mt-0.5 text-slate-800">{employeSelectionne.remunereAuJour ? 'Oui' : 'Non'}</dd>
+            )}
+
+            {employeSelectionne.remunereAuJour && peutGerer && (
+              <form onSubmit={enregistrerTauxJournalier} className="mt-3 rounded-lg border border-slate-200 p-3">
+                <p className="mb-2 text-xs text-slate-500">
+                  Montants mensuels de référence (F CFA) — proratisés par jours de la fiche Pointage validée du
+                  mois / 30, comme pour un salarié sous contrat.
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className={LABEL}>Salaire de base mensuel</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={tauxForm.salaireBaseMensuel}
+                      onChange={(e) => setTauxForm((p) => ({ ...p, salaireBaseMensuel: e.target.value }))}
+                      className={CHAMP}
+                    />
+                  </div>
+                  <div>
+                    <label className={LABEL}>Transport mensuel</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={tauxForm.indemniteTransportMensuel}
+                      onChange={(e) => setTauxForm((p) => ({ ...p, indemniteTransportMensuel: e.target.value }))}
+                      className={CHAMP}
+                    />
+                  </div>
+                  <div>
+                    <label className={LABEL}>Prime de lait mensuelle</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={tauxForm.primeLaitMensuel}
+                      onChange={(e) => setTauxForm((p) => ({ ...p, primeLaitMensuel: e.target.value }))}
+                      className={CHAMP}
+                    />
+                  </div>
+                  <div>
+                    <label className={LABEL}>Prime de salissure mensuelle</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={tauxForm.primeSalissureMensuel}
+                      onChange={(e) => setTauxForm((p) => ({ ...p, primeSalissureMensuel: e.target.value }))}
+                      className={CHAMP}
+                    />
+                  </div>
+                </div>
+                <button
+                  disabled={tauxEnCours}
+                  className="mt-3 rounded-md bg-primary-700 px-3 py-1.5 text-xs font-medium text-white transition-colors duration-200 hover:bg-primary-800 disabled:opacity-60"
+                >
+                  {tauxEnCours ? 'Enregistrement...' : tauxJournalier ? 'Mettre à jour le taux' : 'Enregistrer le taux'}
+                </button>
+              </form>
             )}
           </div>
 

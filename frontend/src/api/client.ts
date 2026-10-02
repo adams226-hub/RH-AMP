@@ -19,7 +19,7 @@ import {
 import { Mission, MissionAvecEmploye } from '../types/missions';
 import { ElementVariable, TypeElementSaisissable } from '../types/elementsVariables';
 import { Contrat, ContratAvecEmploye } from '../types/contrats';
-import { Employe, ResumeRhEmploye } from '../types/employe';
+import { Employe, ResumeRhEmploye, TauxJournalier } from '../types/employe';
 import { BulletinPaie, ResultatCalculMasse, ResultatSimulationNetVersBrut } from '../types/paie';
 import {
   AnomalieAbsence,
@@ -141,6 +141,7 @@ export const api = {
       dateEmbauche: string;
       categorieProfessionnelle?: string;
       soumisPointage?: boolean;
+      remunereAuJour?: boolean;
       situationMatrimoniale?: string;
       groupeSanguin?: string;
       contactUrgenceNom?: string;
@@ -173,6 +174,7 @@ export const api = {
       dateEmbauche: string;
       categorieProfessionnelle: string;
       soumisPointage: boolean;
+      remunereAuJour: boolean;
       situationMatrimoniale: string;
       groupeSanguin: string;
       contactUrgenceNom: string;
@@ -192,6 +194,29 @@ export const api = {
     requete<Employe>(`/api/employes/${id}/chantier`, { method: 'POST', body: JSON.stringify({ chantierId }) }, jeton),
   changerSoumisPointageEmploye: (jeton: string, id: string, soumisPointage: boolean) =>
     requete<Employe>(`/api/employes/${id}/pointage`, { method: 'POST', body: JSON.stringify({ soumisPointage }) }, jeton),
+  changerRemunereAuJourEmploye: (jeton: string, id: string, remunereAuJour: boolean) =>
+    requete<Employe>(
+      `/api/employes/${id}/remunere-au-jour`,
+      { method: 'POST', body: JSON.stringify({ remunereAuJour }) },
+      jeton
+    ),
+  obtenirTauxJournalier: (jeton: string, employeId: string) =>
+    requete<TauxJournalier | null>(`/api/employes/${employeId}/taux-journalier`, {}, jeton),
+  definirTauxJournalier: (
+    jeton: string,
+    employeId: string,
+    donnees: {
+      salaireBaseMensuel: number;
+      indemniteTransportMensuel: number;
+      primeLaitMensuel: number;
+      primeSalissureMensuel: number;
+    }
+  ) =>
+    requete<TauxJournalier>(
+      `/api/employes/${employeId}/taux-journalier`,
+      { method: 'PUT', body: JSON.stringify(donnees) },
+      jeton
+    ),
 
   // Postes
   listerFiliales: (jeton: string, visiblesUniquement = false) =>

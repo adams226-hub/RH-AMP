@@ -41,6 +41,9 @@ export interface PointageMensuel {
   heuresHs35: number;
   heuresHs60: number;
   joursPanier: number;
+  // Jours où l'employé a effectivement pointé des heures ce mois — base de calcul de la paie des
+  // employés rémunérés au jour (taux_journaliers), distinct de joursPanier (seuil ≥ 10h/j).
+  joursTravailles: number;
   nbJoursAbsenceInjustifiee: number;
   nbJoursReposMedical: number;
   nbJoursPermissionNonPayee: number;

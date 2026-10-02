@@ -4,6 +4,7 @@ import { authentification } from '../../middleware/authentification';
 import { autoriserRoles } from '../../middleware/autorisation';
 import {
   affecterChantier,
+  changerRemunereAuJour,
   changerSoumisPointage,
   changerStatut,
   creer,
@@ -11,6 +12,8 @@ import {
   modifier,
   obtenir,
   resumeRh,
+  tauxJournalierDefinir,
+  tauxJournalierObtenir,
 } from './employes.controller';
 
 export const routesEmployes = Router();
@@ -27,3 +30,6 @@ routesEmployes.patch('/:id', gestionnairesEmployes, asyncHandler(modifier));
 routesEmployes.post('/:id/statut', gestionnairesEmployes, asyncHandler(changerStatut));
 routesEmployes.post('/:id/chantier', gestionnairesEmployes, asyncHandler(affecterChantier));
 routesEmployes.post('/:id/pointage', gestionnairesEmployes, asyncHandler(changerSoumisPointage));
+routesEmployes.post('/:id/remunere-au-jour', gestionnairesEmployes, asyncHandler(changerRemunereAuJour));
+routesEmployes.get('/:id/taux-journalier', asyncHandler(tauxJournalierObtenir));
+routesEmployes.put('/:id/taux-journalier', gestionnairesEmployes, asyncHandler(tauxJournalierDefinir));

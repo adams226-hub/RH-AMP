@@ -6,7 +6,13 @@ import { autoriserRoles, filialesAutoriseesPour } from '../../middleware/autoris
 import { pool } from '../../config/db';
 import { ErreurApplicative } from '../../middleware/gestionErreurs';
 import { verifierCycleOuvertPourEmploye, verifierCycleOuvertPourFiliale } from '../cyclesPaie/verrouCycle';
-import { calculerBrutDepuisNet, calculerBulletinPaie, Categorie, LigneHeureSupplementaire } from './calculerBulletinPaie';
+import {
+  calculerBrutDepuisNet,
+  calculerBulletinJournalier,
+  calculerBulletinPaie,
+  Categorie,
+  LigneHeureSupplementaire,
+} from './calculerBulletinPaie';
 import { genererBulletinPdf } from './paie.pdf';
 
 // ============================================================================
@@ -207,6 +213,7 @@ interface EmployePourPaie {
   categorie: Categorie;
   personnesACharge: number;
   fonctionIntitule: string | null;
+  remunereAuJour: boolean;
 }
 
 // Les colonnes DATE sont lues en texte brut ('AAAA-MM-JJ', cf. config/db.ts) pour éviter le
@@ -222,7 +229,7 @@ function parserDateLocale(date: string): Date {
 // identique à l'ancien mapping quand categorie_professionnelle était NULL).
 async function obtenirEmployePourPaie(employeId: string): Promise<EmployePourPaie> {
   const { rows } = await pool.query(
-    `SELECT e.date_embauche, e.personnes_a_charge, fo.intitule AS fonction_intitule,
+    `SELECT e.date_embauche, e.personnes_a_charge, e.remunere_au_jour, fo.intitule AS fonction_intitule,
             COALESCE(cp.est_cadre, false) AS est_cadre
      FROM employes e
      LEFT JOIN fonctions fo ON fo.id = e.fonction_id
@@ -242,7 +249,58 @@ async function obtenirEmployePourPaie(employeId: string): Promise<EmployePourPai
     categorie,
     personnesACharge: Number(rows[0].personnes_a_charge),
     fonctionIntitule: rows[0].fonction_intitule as string | null,
+    remunereAuJour: rows[0].remunere_au_jour as boolean,
   };
+}
+
+interface TauxJournalierPourPaie {
+  salaireBaseMensuel: number;
+  indemniteTransportMensuel: number;
+  primeLaitMensuel: number;
+  primeSalissureMensuel: number;
+}
+
+async function obtenirTauxJournalierActif(employeId: string): Promise<TauxJournalierPourPaie> {
+  const { rows } = await pool.query(
+    `SELECT salaire_base_mensuel, indemnite_transport_mensuel, prime_lait_mensuel, prime_salissure_mensuel
+     FROM taux_journaliers WHERE employe_id = $1`,
+    [employeId]
+  );
+
+  if (!rows[0]) {
+    throw new ErreurApplicative(
+      409,
+      "Aucun taux journalier configuré pour cet employé rémunéré au jour — impossible de calculer la paie"
+    );
+  }
+
+  const l = rows[0];
+  return {
+    salaireBaseMensuel: Number(l.salaire_base_mensuel),
+    indemniteTransportMensuel: Number(l.indemnite_transport_mensuel),
+    primeLaitMensuel: Number(l.prime_lait_mensuel),
+    primeSalissureMensuel: Number(l.prime_salissure_mensuel),
+  };
+}
+
+// Jours réellement pointés ce mois (pointages_mensuels.jours_travailles) — seule source de jours
+// pour un employé rémunéré au jour, à la place de « 30 − absences » utilisé pour les mensualisés.
+// Exige une fiche validée : sans ça, aucun moyen fiable de savoir combien de jours payer.
+async function obtenirJoursTravaillesValides(employeId: string, periode: string): Promise<number> {
+  const { rows } = await pool.query(
+    `SELECT statut, jours_travailles FROM pointages_mensuels
+     WHERE employe_id = $1 AND mois_paie = date_trunc('month', $2::date)`,
+    [employeId, periode]
+  );
+
+  if (!rows[0] || rows[0].statut !== 'valide') {
+    throw new ErreurApplicative(
+      409,
+      'Aucune fiche de pointage validée pour ce mois — impossible de calculer la paie de cet employé rémunéré au jour'
+    );
+  }
+
+  return Number(rows[0].jours_travailles);
 }
 
 function mapBulletin(l: Record<string, unknown>): BulletinPaie {
@@ -311,16 +369,55 @@ async function verifierPointageValidePourEmploye(employeId: string, periode: str
   }
 }
 
+// Valeurs communes aux deux moteurs (mensualisé via contrat, ou journalier via taux_journaliers)
+// juste avant l'écriture en base — permet à calculerEtEnregistrerBulletin de ne garder qu'un seul
+// bloc INSERT/UPDATE, quel que soit le moteur qui a produit ces chiffres.
+interface ValeursBulletin {
+  joursPrisEnCompte: number;
+  salaireBase: number;
+  sursalaire: number;
+  indemniteLogement: number;
+  indemniteTransport: number;
+  indemniteFonction: number;
+  indemniteSujetion: number;
+  indemniteAstreinte: number;
+  ancienneteAnnees: number;
+  primeAnciennete: number;
+  totalHeuresSupplementaires: number;
+  hs15: number;
+  hs35: number;
+  hs50: number;
+  hs60: number;
+  hs120: number;
+  primePanier: number;
+  primeSalissure: number;
+  primeLait: number;
+  autresIndemnites: number;
+  avanceAcompte: number;
+  reliquat: number;
+  reversementTropPercu: number;
+  remunerationTotale: number;
+  exonerationsTotal: number;
+  abattementForfaitaire: number;
+  salaireNetImposable: number;
+  baseImposable: number;
+  iutsNet: number;
+  cnssSalariale: number;
+  salaireNet: number;
+  fsp: number;
+  netAPayer: number;
+}
+
 export async function calculerEtEnregistrerBulletin(elements: ElementsCalculBulletin): Promise<BulletinPaie> {
   await verifierCycleOuvertPourEmploye(elements.employeId, elements.periode);
   await verifierPointageValidePourEmploye(elements.employeId, elements.periode);
 
-  const contrat = await obtenirContratActif(elements.employeId);
   const employe = await obtenirEmployePourPaie(elements.employeId);
 
   // Éléments saisis via l'écran "Éléments du mois" (prime/avance/panier/reliquat/absence/trop
   // perçu) — une seule ligne par (employé, mois, type) grâce à la contrainte d'unicité, donc
-  // SUM = valeur saisie. Source unique, reprise en calcul individuel comme en calcul de masse.
+  // SUM = valeur saisie. Source unique, reprise en calcul individuel comme en calcul de masse, et
+  // par les deux moteurs (mensualisé et journalier).
   // heure_sup_15/35/60 sont alimentées automatiquement par la validation d'une fiche Pointage
   // (en heures, pas en F CFA — colonne `montant` réutilisée) ; heure_sup_50/120 restent des cas
   // exceptionnels saisis à la main (cf. SPEC_MODULE_POINTAGE_AMP.md, décision produit).
@@ -340,25 +437,24 @@ export async function calculerEtEnregistrerBulletin(elements: ElementsCalculBull
   );
   const parType = new Map(elementsMoisRows.map((l) => [l.type as string, l]));
   const montantDuType = (type: string) => Number(parType.get(type)?.total_montant ?? 0);
-  const joursAbsenceInjustifiee = Number(parType.get('absence_injustifiee')?.total_jours ?? 0);
-  const joursPrisEnCompte = Math.max(0, 30 - joursAbsenceInjustifiee);
 
-  const resultat = calculerBulletinPaie(
-    {
-      salaireDeBase: contrat.salaireBase,
-      indemniteLogement: contrat.indemniteLogement,
-      indemniteTransport: contrat.indemniteTransport,
-      indemniteSujetion: contrat.indemniteSujetion,
-      indemniteAstreinte: contrat.indemniteAstreinte,
-      indemniteFonction: contrat.indemniteFonction,
-      sursalaire: contrat.sursalaire,
-      dateEntree: employe.dateEmbauche,
-      categorie: employe.categorie,
-      declarationCnss: 'O', // toujours soumis à CNSS aujourd'hui — pas de champ dédié pour distinguer
-      personnesACharge: employe.personnesACharge,
-    },
-    {
-      joursPrisEnCompte,
+  let valeurs: ValeursBulletin;
+
+  if (employe.remunereAuJour) {
+    // Ouvrier sans contrat, payé sur un montant mensuel de référence (cf. taux_journaliers)
+    // proratisé par jours réellement pointés / 30 — pas de prime d'ancienneté (aucune référence
+    // mensuelle pour l'asseoir), ni de retenues CNSS/IUTS/1% (non déclaré à la CNSS en l'absence
+    // de contrat — décision produit), cf. calculerBulletinJournalier. Les heures sup comptent en
+    // revanche comme pour un salarié sous contrat, assises sur le salaire de base mensuel.
+    const taux = await obtenirTauxJournalierActif(elements.employeId);
+    const joursTravailles = await obtenirJoursTravaillesValides(elements.employeId, elements.periode);
+
+    const resultat = calculerBulletinJournalier({
+      joursTravailles,
+      salaireBaseMensuel: taux.salaireBaseMensuel,
+      indemniteTransportMensuel: taux.indemniteTransportMensuel,
+      primeLaitMensuel: taux.primeLaitMensuel,
+      primeSalissureMensuel: taux.primeSalissureMensuel,
       heuresSupplementaires: {
         taux15: montantDuType('heure_sup_15'),
         taux35: montantDuType('heure_sup_35'),
@@ -366,20 +462,129 @@ export async function calculerEtEnregistrerBulletin(elements: ElementsCalculBull
         taux60: montantDuType('heure_sup_60'),
         taux120: montantDuType('heure_sup_120'),
       },
-      heuresSupplementairesForfaitaires: 0,
+      panier: montantDuType('panier'),
       autresIndemnites: montantDuType('prime'),
-      // "Éléments du mois" n'a qu'une seule saisie "avance" : c'est ce qui est effectivement
-      // retenu ce mois-ci, donc mappé sur retenuesAvancesDuMois (le seul terme utilisé par la
-      // formule du net à payer, cf. SPEC_MOTEUR_PAIE_AMP.md §17) — pas avancesAccordees.
-      avancesAccordees: 0,
       retenuesAvancesDuMois: montantDuType('avance'),
       reversementTropPercu: montantDuType('trop_percu'),
       reliquat: montantDuType('reliquat'),
-      panier: montantDuType('panier'),
+    });
+
+    valeurs = {
+      joursPrisEnCompte: joursTravailles,
+      salaireBase: resultat.salaireBase,
+      sursalaire: 0,
+      indemniteLogement: 0,
+      indemniteTransport: resultat.indemniteTransport,
+      indemniteFonction: 0,
+      indemniteSujetion: 0,
+      indemniteAstreinte: 0,
+      ancienneteAnnees: 0,
+      primeAnciennete: 0,
+      totalHeuresSupplementaires: resultat.totalHeuresSupplementaires,
+      hs15: montantParTaux(resultat.heuresSupplementaires, 15),
+      hs35: montantParTaux(resultat.heuresSupplementaires, 35),
+      hs50: montantParTaux(resultat.heuresSupplementaires, 50),
+      hs60: montantParTaux(resultat.heuresSupplementaires, 60),
+      hs120: montantParTaux(resultat.heuresSupplementaires, 120),
+      primePanier: montantDuType('panier'),
+      primeSalissure: resultat.primeSalissure,
+      primeLait: resultat.primeLait,
+      autresIndemnites: montantDuType('prime'),
+      avanceAcompte: montantDuType('avance'),
+      reliquat: montantDuType('reliquat'),
+      reversementTropPercu: montantDuType('trop_percu'),
+      remunerationTotale: resultat.remunerationTotale,
+      exonerationsTotal: resultat.exonerationsIndemnites.total,
+      abattementForfaitaire: resultat.abattementForfaitaire,
+      salaireNetImposable: resultat.salaireNetImposable,
+      baseImposable: resultat.baseImposable,
+      iutsNet: resultat.iutsNet,
+      cnssSalariale: resultat.retenueCNSS,
+      salaireNet: resultat.salaireNet,
+      fsp: resultat.retenueFSP,
+      netAPayer: resultat.netAPayer,
+    };
+  } else {
+    const contrat = await obtenirContratActif(elements.employeId);
+    const joursAbsenceInjustifiee = Number(parType.get('absence_injustifiee')?.total_jours ?? 0);
+    const joursPrisEnCompte = Math.max(0, 30 - joursAbsenceInjustifiee);
+
+    const resultat = calculerBulletinPaie(
+      {
+        salaireDeBase: contrat.salaireBase,
+        indemniteLogement: contrat.indemniteLogement,
+        indemniteTransport: contrat.indemniteTransport,
+        indemniteSujetion: contrat.indemniteSujetion,
+        indemniteAstreinte: contrat.indemniteAstreinte,
+        indemniteFonction: contrat.indemniteFonction,
+        sursalaire: contrat.sursalaire,
+        dateEntree: employe.dateEmbauche,
+        categorie: employe.categorie,
+        declarationCnss: 'O', // toujours soumis à CNSS aujourd'hui — pas de champ dédié pour distinguer
+        personnesACharge: employe.personnesACharge,
+      },
+      {
+        joursPrisEnCompte,
+        heuresSupplementaires: {
+          taux15: montantDuType('heure_sup_15'),
+          taux35: montantDuType('heure_sup_35'),
+          taux50: montantDuType('heure_sup_50'),
+          taux60: montantDuType('heure_sup_60'),
+          taux120: montantDuType('heure_sup_120'),
+        },
+        heuresSupplementairesForfaitaires: 0,
+        autresIndemnites: montantDuType('prime'),
+        // "Éléments du mois" n'a qu'une seule saisie "avance" : c'est ce qui est effectivement
+        // retenu ce mois-ci, donc mappé sur retenuesAvancesDuMois (le seul terme utilisé par la
+        // formule du net à payer, cf. SPEC_MOTEUR_PAIE_AMP.md §17) — pas avancesAccordees.
+        avancesAccordees: 0,
+        retenuesAvancesDuMois: montantDuType('avance'),
+        reversementTropPercu: montantDuType('trop_percu'),
+        reliquat: montantDuType('reliquat'),
+        panier: montantDuType('panier'),
+        primeSalissure: montantDuType('prime_salissure'),
+        primeLait: montantDuType('prime_lait'),
+      }
+    );
+
+    valeurs = {
+      joursPrisEnCompte,
+      salaireBase: resultat.elementsProratises.salaireDeBase,
+      sursalaire: resultat.elementsProratises.sursalaire,
+      indemniteLogement: resultat.elementsProratises.indemniteLogement,
+      indemniteTransport: resultat.elementsProratises.indemniteTransport,
+      indemniteFonction: resultat.elementsProratises.indemniteFonction,
+      indemniteSujetion: resultat.elementsProratises.indemniteSujetion,
+      indemniteAstreinte: resultat.elementsProratises.indemniteAstreinte,
+      ancienneteAnnees: resultat.ancienneteAnnees,
+      primeAnciennete: resultat.primeAnciennete,
+      totalHeuresSupplementaires: resultat.totalHeuresSupplementaires,
+      // Montant calculé (F CFA) par tranche, pas les heures saisies — resultat.heuresSupplementaires
+      // contient déjà { majorationPourcent, nombreHeures, tauxHoraire, montant } par taux.
+      hs15: montantParTaux(resultat.heuresSupplementaires, 15),
+      hs35: montantParTaux(resultat.heuresSupplementaires, 35),
+      hs50: montantParTaux(resultat.heuresSupplementaires, 50),
+      hs60: montantParTaux(resultat.heuresSupplementaires, 60),
+      hs120: montantParTaux(resultat.heuresSupplementaires, 120),
+      primePanier: montantDuType('panier'),
       primeSalissure: montantDuType('prime_salissure'),
       primeLait: montantDuType('prime_lait'),
-    }
-  );
+      autresIndemnites: montantDuType('prime'),
+      avanceAcompte: montantDuType('avance'),
+      reliquat: montantDuType('reliquat'),
+      reversementTropPercu: montantDuType('trop_percu'),
+      remunerationTotale: resultat.remunerationTotale,
+      exonerationsTotal: resultat.exonerationsIndemnites.total,
+      abattementForfaitaire: resultat.abattementForfaitaire,
+      salaireNetImposable: resultat.salaireNetImposable,
+      baseImposable: resultat.baseImposable,
+      iutsNet: resultat.iutsNet,
+      cnssSalariale: resultat.retenueCNSS,
+      salaireNet: resultat.salaireNet,
+      fsp: resultat.retenueFSP,
+      netAPayer: resultat.netAPayer,
+    };
+  }
 
   // BUG CORRIGÉ (ADDENDUM_JOURNAL_PAIE_AMP.md §3) : la cotisation patronale plafonnait sur le
   // salaire de base nominal seul, alors que la formule réelle plafonne sur la rémunération
@@ -388,9 +593,9 @@ export async function calculerEtEnregistrerBulletin(elements: ElementsCalculBull
   const tauxCnssPatronale = await obtenirParametre('taux_cnss_patronale');
   const tauxTpa = await obtenirParametre('taux_tpa');
   const coutEmployeur = Math.round(
-    resultat.remunerationTotale +
-      tauxCnssPatronale * Math.min(resultat.remunerationTotale, PLAFOND_CNSS) +
-      tauxTpa * resultat.remunerationTotale
+    valeurs.remunerationTotale +
+      tauxCnssPatronale * Math.min(valeurs.remunerationTotale, PLAFOND_CNSS) +
+      tauxTpa * valeurs.remunerationTotale
   );
 
   const { rows } = await pool.query(
@@ -435,43 +640,41 @@ export async function calculerEtEnregistrerBulletin(elements: ElementsCalculBull
     [
       elements.employeId,
       elements.periode,
-      joursPrisEnCompte,
+      valeurs.joursPrisEnCompte,
       employe.personnesACharge,
       employe.fonctionIntitule,
-      resultat.elementsProratises.salaireDeBase,
-      resultat.elementsProratises.sursalaire,
-      resultat.elementsProratises.indemniteLogement,
-      resultat.elementsProratises.indemniteTransport,
-      resultat.elementsProratises.indemniteFonction,
-      resultat.elementsProratises.indemniteSujetion,
-      resultat.elementsProratises.indemniteAstreinte,
-      resultat.ancienneteAnnees,
-      resultat.primeAnciennete,
-      resultat.totalHeuresSupplementaires,
-      // Montant calculé (F CFA) par tranche, pas les heures saisies — resultat.heuresSupplementaires
-      // contient déjà { majorationPourcent, nombreHeures, tauxHoraire, montant } par taux.
-      montantParTaux(resultat.heuresSupplementaires, 15),
-      montantParTaux(resultat.heuresSupplementaires, 35),
-      montantParTaux(resultat.heuresSupplementaires, 50),
-      montantParTaux(resultat.heuresSupplementaires, 60),
-      montantParTaux(resultat.heuresSupplementaires, 120),
-      montantDuType('panier'),
-      montantDuType('prime_salissure'),
-      montantDuType('prime_lait'),
-      montantDuType('prime'),
-      montantDuType('avance'),
-      montantDuType('reliquat'),
-      montantDuType('trop_percu'),
-      resultat.remunerationTotale,
-      resultat.exonerationsIndemnites.total,
-      resultat.abattementForfaitaire,
-      resultat.salaireNetImposable,
-      resultat.baseImposable,
-      resultat.iutsNet,
-      resultat.retenueCNSS,
-      resultat.salaireNet,
-      resultat.retenueFSP,
-      resultat.netAPayer,
+      valeurs.salaireBase,
+      valeurs.sursalaire,
+      valeurs.indemniteLogement,
+      valeurs.indemniteTransport,
+      valeurs.indemniteFonction,
+      valeurs.indemniteSujetion,
+      valeurs.indemniteAstreinte,
+      valeurs.ancienneteAnnees,
+      valeurs.primeAnciennete,
+      valeurs.totalHeuresSupplementaires,
+      valeurs.hs15,
+      valeurs.hs35,
+      valeurs.hs50,
+      valeurs.hs60,
+      valeurs.hs120,
+      valeurs.primePanier,
+      valeurs.primeSalissure,
+      valeurs.primeLait,
+      valeurs.autresIndemnites,
+      valeurs.avanceAcompte,
+      valeurs.reliquat,
+      valeurs.reversementTropPercu,
+      valeurs.remunerationTotale,
+      valeurs.exonerationsTotal,
+      valeurs.abattementForfaitaire,
+      valeurs.salaireNetImposable,
+      valeurs.baseImposable,
+      valeurs.iutsNet,
+      valeurs.cnssSalariale,
+      valeurs.salaireNet,
+      valeurs.fsp,
+      valeurs.netAPayer,
       coutEmployeur,
     ]
   );
@@ -486,7 +689,7 @@ export async function calculerMasseSalariale(filialeId: string, periode: string)
   await verifierCycleOuvertPourFiliale(filialeId, periode);
 
   const { rows } = await pool.query(
-    `SELECT e.id, e.nom, e.prenoms,
+    `SELECT e.id, e.nom, e.prenoms, e.remunere_au_jour,
             EXISTS (SELECT 1 FROM contrats c WHERE c.employe_id = e.id AND c.statut = 'actif') AS a_contrat_actif
      FROM employes e
      WHERE e.statut = 'actif' AND e.filiale_id = $1
@@ -498,7 +701,9 @@ export async function calculerMasseSalariale(filialeId: string, periode: string)
   const echecs: ResultatCalculMasse['echecs'] = [];
 
   for (const ligne of rows) {
-    if (!ligne.a_contrat_actif) {
+    // Un employé rémunéré au jour n'a jamais de contrat par construction — ne pas l'exclure ici,
+    // calculerEtEnregistrerBulletin vérifie lui-même qu'un taux journalier est configuré.
+    if (!ligne.a_contrat_actif && !ligne.remunere_au_jour) {
       echecs.push({ employeId: ligne.id, nom: ligne.nom, prenoms: ligne.prenoms, motif: 'Aucun contrat actif' });
       continue;
     }

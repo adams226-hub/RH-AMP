@@ -200,7 +200,7 @@ async function obtenirLignesJournal(filialeId: string, periode: string): Promise
   const PLAFOND_CNSS = 800_000;
 
   const { rows } = await pool.query(
-    `SELECT b.*, c.salaire_base AS salaire_base_nominal,
+    `SELECT b.*, c.salaire_base AS salaire_base_nominal, tj.salaire_base_mensuel,
             e.matricule, e.nom, e.prenoms, e.rib, e.banque, e.mode_paiement, e.categorie_professionnelle,
             fil.nom AS entreprise,
             COALESCE(chp.nom, chd.nom) AS lieu_affectation
@@ -216,6 +216,7 @@ async function obtenirLignesJournal(filialeId: string, periode: string): Promise
        WHERE employe_id = e.id AND statut = 'actif'
        ORDER BY date_debut DESC LIMIT 1
      ) c ON true
+     LEFT JOIN taux_journaliers tj ON tj.employe_id = e.id
      WHERE e.filiale_id = $1 AND b.periode = date_trunc('month', $2::date)
      ORDER BY e.nom, e.prenoms`,
     [filialeId, periode]
@@ -238,7 +239,11 @@ async function obtenirLignesJournal(filialeId: string, periode: string): Promise
       lieuAffectation: l.lieu_affectation,
       categorie: l.categorie_professionnelle,
       joursPrisEnCompte: Number(l.jours_pris_en_compte),
-      tauxJournalier: tauxJournalier(salaireBaseNominal),
+      // Employé rémunéré au jour : son salaire de base mensuel de référence est connu
+      // (taux_journaliers) — même dérivation /30 que pour un salarié sous contrat.
+      tauxJournalier: tauxJournalier(
+        l.salaire_base_mensuel !== null ? Number(l.salaire_base_mensuel) : salaireBaseNominal
+      ),
       personnesACharge: Number(l.personnes_a_charge),
       salaireBase: Number(l.salaire_base),
       indemniteFonction: Number(l.indemnite_fonction),

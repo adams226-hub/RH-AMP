@@ -13,6 +13,7 @@ const LIBELLES: Record<string, string> = {
   taux_tpa: 'Taux TPA',
   taux_fsp: 'Taux FSP',
   taux_abattement: 'Taux abattement forfaitaire',
+  taux_panier_jour: 'Prime de panier / jour',
 };
 
 const NOTES: Record<string, string> = {
@@ -20,7 +21,12 @@ const NOTES: Record<string, string> = {
   taux_tpa: 'Taxe Patronale d’Apprentissage, à la charge de l’employeur.',
   taux_fsp: 'Fonds de Soutien Patriotique, retenue sur le salaire net.',
   taux_abattement: 'Abattement forfaitaire pour frais professionnels (20% cadre / 25% autre catégorie).',
+  taux_panier_jour: 'Montant en F CFA par jour de panier pointé (pointage validé).',
 };
+
+// taux_panier_jour est un montant en F CFA, pas un taux — les autres clés restent des
+// pourcentages (valeur stockée entre 0 et 1, affichée ×100 avec un signe %).
+const UNITES_MONTANT = new Set(['taux_panier_jour']);
 
 export function SectionParametresPaie() {
   const { jeton, role } = useAuth();
@@ -46,16 +52,18 @@ export function SectionParametresPaie() {
 
   async function enregistrer() {
     if (!jeton || !edition) return;
-    const valeurPourcent = Number(edition.valeur);
-    if (Number.isNaN(valeurPourcent) || valeurPourcent < 0 || valeurPourcent > 100) {
-      setErreur('Le taux doit être un nombre entre 0 et 100.');
+    const estMontant = UNITES_MONTANT.has(edition.cle);
+    const saisie = Number(edition.valeur);
+
+    if (Number.isNaN(saisie) || saisie < 0 || (!estMontant && saisie > 100)) {
+      setErreur(estMontant ? 'Le montant doit être un nombre positif.' : 'Le taux doit être un nombre entre 0 et 100.');
       return;
     }
 
     setEnregistrementEnCours(true);
     setErreur(null);
     try {
-      await api.definirParametrePaie(jeton, edition.cle, valeurPourcent / 100);
+      await api.definirParametrePaie(jeton, edition.cle, estMontant ? saisie : saisie / 100);
       setEdition(null);
       rafraichir();
     } catch (e) {
@@ -102,19 +110,21 @@ export function SectionParametresPaie() {
                       <div className="flex items-center gap-1">
                         <input
                           type="number"
-                          step="0.1"
+                          step={UNITES_MONTANT.has(p.cle) ? '1' : '0.1'}
                           value={edition.valeur}
                           onChange={(e) => setEdition({ cle: p.cle, valeur: e.target.value })}
                           className={CHAMP}
                           autoFocus
                         />
-                        <span className="text-slate-500">%</span>
+                        <span className="text-slate-500">{UNITES_MONTANT.has(p.cle) ? 'F CFA' : '%'}</span>
                       </div>
                     ) : p.valeur === null ? (
                       <Badge couleur="alerte">Non configuré</Badge>
                     ) : (
                       <span className="font-semibold text-slate-900 [font-variant-numeric:tabular-nums]">
-                        {(p.valeur * 100).toFixed(1)} %
+                        {UNITES_MONTANT.has(p.cle)
+                          ? `${p.valeur.toLocaleString('fr-FR')} F CFA`
+                          : `${(p.valeur * 100).toFixed(1)} %`}
                       </span>
                     )}
                   </td>
@@ -139,7 +149,12 @@ export function SectionParametresPaie() {
                         </div>
                       ) : (
                         <button
-                          onClick={() => setEdition({ cle: p.cle, valeur: p.valeur !== null ? String(p.valeur * 100) : '' })}
+                          onClick={() =>
+                            setEdition({
+                              cle: p.cle,
+                              valeur: p.valeur === null ? '' : String(UNITES_MONTANT.has(p.cle) ? p.valeur : p.valeur * 100),
+                            })
+                          }
                           className="font-medium text-primary-700 transition-colors duration-200 hover:underline"
                         >
                           Modifier

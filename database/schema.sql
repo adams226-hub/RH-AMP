@@ -277,6 +277,13 @@ CREATE TABLE employes (
     -- même — décision RH explicite par employé, jamais déduite d'un autre champ. Défaut à false
     -- pour ne bloquer personne tant que le RH n'a pas coché la case lui-même.
     soumis_pointage BOOLEAN NOT NULL DEFAULT false,
+    -- Ouvrier de chantier sans contrat, payé uniquement au jour réellement pointé (cf. table
+    -- taux_journaliers) : le moteur de paie saute alors l'exigence de contrat actif et calcule
+    -- salaire de base/transport/prime de lait/prime de salissure = taux journalier × jours
+    -- travaillés du mois (pointages_mensuels.jours_travailles), au lieu de proratiser un montant
+    -- mensuel de contrat. Indépendant de soumis_pointage (toujours vrai en pratique pour ces
+    -- employés, la paie exige de toute façon une fiche Pointage validée pour connaître les jours).
+    remunere_au_jour BOOLEAN NOT NULL DEFAULT false,
 
     date_embauche   DATE NOT NULL,
     statut          statut_employe NOT NULL DEFAULT 'en_cours_creation',
@@ -524,6 +531,10 @@ CREATE TABLE pointages_mensuels (
     heures_hs_35       NUMERIC(6,2) NOT NULL DEFAULT 0,
     heures_hs_60       NUMERIC(6,2) NOT NULL DEFAULT 0,
     jours_panier       NUMERIC(5,2) NOT NULL DEFAULT 0,
+    -- Jours où l'employé a effectivement pointé des heures ce mois (heures IS NOT NULL dans
+    -- pointages_jours) — distinct de jours_panier (seuil ≥ 10h/j). Base de calcul de la paie des
+    -- employés rémunérés au jour (cf. table taux_journaliers, sans contrat).
+    jours_travailles   NUMERIC(5,2) NOT NULL DEFAULT 0,
 
     nb_jours_absence_injustifiee   NUMERIC(5,2) NOT NULL DEFAULT 0,
     nb_jours_repos_medical         NUMERIC(5,2) NOT NULL DEFAULT 0,
@@ -565,6 +576,24 @@ CREATE TABLE pointages_jours (
 );
 
 CREATE INDEX idx_pointages_jours_mensuel ON pointages_jours(pointage_mensuel_id);
+
+-- Montants mensuels de référence d'un employé rémunéré au jour (employes.remunere_au_jour), en
+-- l'absence de contrat pour les porter. Proratisés par jours réellement pointés / 30 au calcul de
+-- paie (calculerBulletinJournalier), exactement comme un salarié sous contrat. Une ligne par
+-- employé (pas d'historique de date d'effet — si le montant change, on écrase ; les bulletins déjà
+-- calculés restent inchangés, cf. bulletins_paie qui stocke les montants du mois, pas une référence
+-- à ce taux).
+CREATE TABLE taux_journaliers (
+    id                           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    employe_id                   UUID NOT NULL UNIQUE REFERENCES employes(id) ON DELETE CASCADE,
+    salaire_base_mensuel         NUMERIC(12,2) NOT NULL DEFAULT 0,
+    indemnite_transport_mensuel  NUMERIC(12,2) NOT NULL DEFAULT 0,
+    prime_lait_mensuel           NUMERIC(12,2) NOT NULL DEFAULT 0,
+    prime_salissure_mensuel      NUMERIC(12,2) NOT NULL DEFAULT 0,
+
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
 -- ============================================================================
 -- 7. PAIE (module Paie)

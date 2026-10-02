@@ -529,6 +529,120 @@ export function calculerBulletinPaie(employe: Employe, elementsVariables: Elemen
 }
 
 // ----------------------------------------------------------------------------
+// BULLETIN « JOURNALIER » — employés sans contrat, payés sur la base d'un montant mensuel de
+// référence (comme un salarié sous contrat) mais sans fiche Contrat : chaque rubrique = montant
+// mensuel de référence proratisé par jours travaillés / 30 (pointages_mensuels.jours_travailles),
+// via la même règle de prorata que calculerBulletinPaie (proraterElement) — à la différence près
+// que "jours pris en compte" vient ici des jours réellement pointés, pas de 30 − absences.
+// Réutilise telles quelles les fonctions fiscales (CNSS, exonérations, abattement, IUTS, FSP, net
+// à payer) définies plus haut, pour ne jamais faire diverger les deux moteurs sur les règles
+// qu'ils ont en commun.
+// Heures supplémentaires comptées comme pour un salarié sous contrat (même fonction
+// calculerHeuresSupplementaires, taux horaire assis sur le salaire de base MENSUEL de référence —
+// la seule base disponible ici, à la place du salaire de base nominal d'un contrat).
+// Hors périmètre volontairement (non demandé, et sans référence mensuelle pour les asseoir) :
+// prime d'ancienneté.
+// ----------------------------------------------------------------------------
+
+export interface ElementsJournalier {
+  joursTravailles: number;
+  salaireBaseMensuel: number;
+  indemniteTransportMensuel: number;
+  primeLaitMensuel: number;
+  primeSalissureMensuel: number;
+  heuresSupplementaires: HeuresSupplementairesSaisies;
+  /** Mêmes sources que calculerBulletinPaie (Éléments du mois / pointage validé). */
+  panier: number;
+  autresIndemnites: number;
+  retenuesAvancesDuMois: number;
+  reversementTropPercu: number;
+  reliquat: number;
+}
+
+export interface BulletinJournalier {
+  salaireBase: number;
+  indemniteTransport: number;
+  primeLait: number;
+  primeSalissure: number;
+  heuresSupplementaires: LigneHeureSupplementaire[];
+  totalHeuresSupplementaires: number;
+  remunerationTotale: number;
+  retenueCNSS: number;
+  salaireBrut: number;
+  exonerationsIndemnites: BulletinPaie['exonerationsIndemnites'];
+  abattementForfaitaire: number;
+  salaireNetImposable: number;
+  baseImposable: number;
+  iutsBrut: number;
+  abattementChargesIUTS: number;
+  iutsNet: number;
+  salaireNet: number;
+  retenueFSP: number;
+  netAPayer: number;
+}
+
+// Employé sans contrat (donc non déclaré à la CNSS dans ce système) : aucune retenue CNSS, IUTS
+// ou 1% — décision produit explicite, cf. échange utilisateur. Seuls les ajustements du mois
+// (avances, trop perçu, reliquat) viennent réduire la rémunération totale pour obtenir le net
+// à payer ; les champs fiscaux de BulletinJournalier sont conservés à 0 pour garder la même forme
+// de bulletin que calculerBulletinPaie (affichage, colonnes du Journal de Paie).
+export function calculerBulletinJournalier(e: ElementsJournalier): BulletinJournalier {
+  const salaireBase = arrondi0(proraterElement(e.salaireBaseMensuel, e.joursTravailles));
+  const indemniteTransport = arrondi0(proraterElement(e.indemniteTransportMensuel, e.joursTravailles));
+  const primeLait = arrondi0(proraterElement(e.primeLaitMensuel, e.joursTravailles));
+  const primeSalissure = arrondi0(proraterElement(e.primeSalissureMensuel, e.joursTravailles));
+
+  const { lignes: heuresSupplementaires, total: totalHeuresSupplementaires } = calculerHeuresSupplementaires(
+    e.salaireBaseMensuel,
+    e.heuresSupplementaires
+  );
+
+  const remunerationTotale =
+    salaireBase +
+    indemniteTransport +
+    primeLait +
+    primeSalissure +
+    totalHeuresSupplementaires +
+    e.autresIndemnites +
+    e.panier;
+
+  const retenueCNSS = 0;
+  const salaireBrut = remunerationTotale;
+  const exonerationsIndemnites = { logement: 0, transport: 0, sujetionAstreinteFonction: 0, total: 0 };
+  const abattementForfaitaire = 0;
+  const salaireNetImposable = 0;
+  const baseImposable = 0;
+  const iutsBrut = 0;
+  const abattementChargesIUTS = 0;
+  const iutsNet = 0;
+  const salaireNet = remunerationTotale;
+  const retenueFSP = 0;
+  const netAPayer = calculerNetAPayer(salaireNet, retenueFSP, e.retenuesAvancesDuMois, e.reversementTropPercu, e.reliquat);
+
+  return {
+    salaireBase,
+    indemniteTransport,
+    primeLait,
+    primeSalissure,
+    heuresSupplementaires,
+    totalHeuresSupplementaires,
+    remunerationTotale,
+    retenueCNSS,
+    salaireBrut,
+    exonerationsIndemnites,
+    abattementForfaitaire,
+    salaireNetImposable,
+    baseImposable,
+    iutsBrut,
+    abattementChargesIUTS,
+    iutsNet,
+    salaireNet,
+    retenueFSP,
+    netAPayer,
+  };
+}
+
+// ----------------------------------------------------------------------------
 // CALCUL INVERSE (ADDENDUM_CALCUL_INVERSE_PAIE_AMP.md) — net à payer souhaité
 // → salaire de base (ou sursalaire) qui le produit. Recherche par dichotomie,
 // réutilise calculerBulletinPaie() tel quel : aucune règle fiscale dupliquée,

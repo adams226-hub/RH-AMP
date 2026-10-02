@@ -30,6 +30,9 @@ export interface Employe {
   // Décision RH indépendante du chantier/contrat — pilote le blocage de paie tant que le
   // pointage du mois n'est pas validé.
   soumisPointage: boolean;
+  // Ouvrier sans contrat, payé uniquement au jour pointé (cf. TauxJournalier) — le calcul de
+  // paie saute alors l'exigence de contrat actif.
+  remunereAuJour: boolean;
   situationMatrimoniale: string | null;
   groupeSanguin: string | null;
   contactUrgenceNom: string | null;
@@ -37,6 +40,17 @@ export interface Employe {
   contactUrgenceTel: string | null;
   contactUrgenceTel2: string | null;
   maladieParticuliere: string | null;
+}
+
+// Montants mensuels de référence d'un employé rémunéré au jour (Employe.remunereAuJour) — chaque
+// rubrique est proratisée par jours pointés / 30 lors du calcul de paie, comme un salarié sous
+// contrat, mais à la place d'un contrat.
+export interface TauxJournalier {
+  employeId: string;
+  salaireBaseMensuel: number;
+  indemniteTransportMensuel: number;
+  primeLaitMensuel: number;
+  primeSalissureMensuel: number;
 }
 
 // Résumé RH affiché sur la fiche employé — année en cours, absences validées par la RH

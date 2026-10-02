@@ -6,7 +6,7 @@ export interface ParametrePaie {
   dateEffet: string;
 }
 
-const CLES_CONNUES = ['taux_cnss_patronale', 'taux_tpa', 'taux_fsp', 'taux_abattement'] as const;
+const CLES_CONNUES = ['taux_cnss_patronale', 'taux_tpa', 'taux_fsp', 'taux_abattement', 'taux_panier_jour'] as const;
 
 // Un paramètre est append-only en base (historisé par date_effet) — on ne renvoie ici que la
 // valeur la plus récente de chaque clé connue, pas tout l'historique.
