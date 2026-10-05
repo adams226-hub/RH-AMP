@@ -9,6 +9,7 @@ interface DonneesBulletinPdf {
   employePrenoms: string;
   fonctionIntitule: string | null;
   filialeNom: string;
+  filialeRaisonSociale: string | null;
   filialeAdresse: string | null;
   filialeRccm: string | null;
   filialeIfu: string | null;
@@ -75,7 +76,8 @@ interface DonneesBulletinPdf {
 async function chargerDonneesBulletin(id: string): Promise<DonneesBulletinPdf> {
   const { rows } = await pool.query(
     `SELECT b.*, e.matricule, e.nom AS employe_nom, e.prenoms AS employe_prenoms, e.banque, e.rib,
-            e.mode_paiement, f.nom AS filiale_nom, f.adresse AS filiale_adresse, f.rccm AS filiale_rccm,
+            e.mode_paiement, f.nom AS filiale_nom, f.raison_sociale AS filiale_raison_sociale,
+            f.adresse AS filiale_adresse, f.rccm AS filiale_rccm,
             f.ifu AS filiale_ifu, f.telephone AS filiale_telephone, f.site_web AS filiale_site_web,
             f.secteur_activite AS filiale_secteur_activite,
             f.mentions_legales_bulletin AS filiale_mentions_legales_bulletin, f.logo_url AS filiale_logo_url,
@@ -100,6 +102,7 @@ async function chargerDonneesBulletin(id: string): Promise<DonneesBulletinPdf> {
     employePrenoms: l.employe_prenoms,
     fonctionIntitule: l.fonction_intitule,
     filialeNom: l.filiale_nom,
+    filialeRaisonSociale: l.filiale_raison_sociale,
     filialeAdresse: l.filiale_adresse,
     filialeRccm: l.filiale_rccm,
     filialeIfu: l.filiale_ifu,
@@ -219,15 +222,23 @@ export async function genererBulletinPdf(id: string): Promise<Buffer> {
       // bulletin doit quand même se générer, juste sans logo plutôt que planter la génération.
     }
   }
-  doc.font('Helvetica-Bold').fontSize(17).text(d.filialeNom, xTexteEntete, 50);
+  // Raison sociale complète (ex. "African Interim Services Sarl"), comme sur l'en-tête papier
+  // réel de la filiale — repli sur le nom court tant qu'elle n'est pas renseignée (Paramètres >
+  // Référentiels). Largeur contrainte à l'espace restant à droite du logo pour un nom plus long
+  // que le sigle, plutôt que de déborder sur la marge.
+  // Taille 20 (au lieu de 15, demande explicite) — remonte secteurActivite et le titre d'autant
+  // pour laisser la place à la ligne plus haute, sans chevauchement.
+  doc.font('Helvetica-Bold').fontSize(20).text(d.filialeRaisonSociale || d.filialeNom, xTexteEntete, 46, {
+    width: xGauche + largeurTotale - xTexteEntete,
+  });
   // '' (chaîne vide, distincte de NULL) = demande explicite de ne rien afficher sous le nom de la
   // filiale ; NULL = repli sur le texte générique du groupe, tant que rien n'a été renseigné.
   const secteurActivite = d.filialeSecteurActivite ?? 'BTP - Génie-Civil - Équipements - Miniers - Import-Export';
   if (secteurActivite) {
-    doc.font('Helvetica').fontSize(9).fillColor('#555').text(secteurActivite, xTexteEntete, 70);
+    doc.font('Helvetica').fontSize(9).fillColor('#555').text(secteurActivite, xTexteEntete, 75);
   }
   doc.fillColor('#000');
-  doc.font('Helvetica-Bold').fontSize(18).text('BULLETIN DE SALAIRE', xGauche, 86, { width: largeurTotale, align: 'center' });
+  doc.font('Helvetica-Bold').fontSize(18).text('BULLETIN DE SALAIRE', xGauche, 92, { width: largeurTotale, align: 'center' });
 
   // Logo 110x110 : espace resserré sous "BULLETIN DE SALAIRE" (juste ce qu'il faut pour dégager
   // le logo) plutôt que la marge large laissée par l'ancien logo 150x150 — la place gagnée sert

@@ -25,6 +25,42 @@ export function numeroComplet(type: TypeAttestation, numero: number, filialeNom:
   return `${PREFIXES[type]}_${String(numero).padStart(3, '0')}/${filialeNom}/${annee}`;
 }
 
+// Champs d'identité obligatoires pour une attestation de travail / un certificat de travail —
+// bugs constatés : date de naissance, matricule et poste pouvaient rester vides (ou faux) sur le
+// PDF généré sans que rien ne l'empêche. Décision produit explicite : refuser la génération plutôt
+// que produire un document officiel numéroté avec des blancs. Attestation de stage non concernée
+// (champs facultatifs par nature, non signalés comme buggés).
+function vide(valeur: string | null | undefined): boolean {
+  return !valeur || !valeur.trim();
+}
+
+export function champsManquants(type: TypeAttestation, donnees: DonneesAttestation): string[] {
+  const manquants: string[] = [];
+
+  if (type === 'att_trav') {
+    const d = donnees as DonneesAttestationTravail;
+    if (vide(d.nomPrenomsEmploye)) manquants.push('Nom et prénoms');
+    if (vide(d.dateNaissance)) manquants.push('Date de naissance');
+    if (vide(d.matricule)) manquants.push('Matricule');
+    if (vide(d.dateEmbauche)) manquants.push("Date d'embauche");
+    if (vide(d.poste)) manquants.push('Poste');
+  }
+
+  if (type === 'cert_trav') {
+    const d = donnees as DonneesCertificatTravail;
+    if (vide(d.nomPrenomsEmploye)) manquants.push('Nom et prénoms');
+    if (vide(d.dateNaissance)) manquants.push('Date de naissance');
+    if (vide(d.matricule)) manquants.push('Matricule');
+    if (vide(d.dateEmbauche)) manquants.push("Date d'embauche");
+    if (vide(d.dateSortie)) manquants.push('Date de sortie');
+    if (d.postesOccupes.length === 0 || d.postesOccupes.some((p) => vide(p.poste))) {
+      manquants.push('Poste(s) occupé(s)');
+    }
+  }
+
+  return manquants;
+}
+
 function mapAttestation(l: Record<string, unknown>, filialeNom: string): Attestation {
   const type = l.type as TypeAttestation;
   const numero = Number(l.numero);
@@ -274,6 +310,11 @@ async function prochainNumero(client: PoolClient, type: TypeAttestation, filiale
 // l'aperçu — non modifiable ensuite (pas de fonction de mise à jour dans ce module, cf. décision
 // produit, même principe d'intégrité que les bulletins de paie déjà générés).
 export async function genererAttestation(saisie: GenerationAttestation, utilisateurId: string): Promise<Attestation> {
+  const manquants = champsManquants(saisie.type, saisie.donnees);
+  if (manquants.length > 0) {
+    throw new ErreurApplicative(422, `Champs obligatoires manquants : ${manquants.join(', ')}.`);
+  }
+
   const employe = await chargerEmploye(saisie.employeId);
   const annee = new Date().getFullYear();
 

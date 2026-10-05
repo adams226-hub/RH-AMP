@@ -64,6 +64,10 @@ export async function pdf(req: Request, res: Response) {
   const buffer = await genererAttestationPdf(req.params.id);
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="${attestation.numeroComplet.replace(/\//g, '-')}.pdf"`);
+  // Le PDF est régénéré à chaque appel à partir des données/couleurs courantes — jamais de version
+  // mise en cache par le navigateur, qui pourrait sinon réafficher un rendu obsolète (ex. ancienne
+  // couleur d'accent) sous la même URL.
+  res.setHeader('Cache-Control', 'no-store');
   res.send(buffer);
 }
 
