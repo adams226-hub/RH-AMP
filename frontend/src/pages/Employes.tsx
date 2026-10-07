@@ -13,7 +13,7 @@ import { Pagination } from '../components/Pagination';
 import { TuileStat } from '../components/TuileStat';
 import { useAuth } from '../context/AuthContext';
 import { useTri } from '../hooks/useTri';
-import { Employe, ResumeRhEmploye, StatutEmploye, TauxJournalier } from '../types/employe';
+import { Employe, OPTIONS_MODE_PAIEMENT, ResumeRhEmploye, StatutEmploye, TauxJournalier } from '../types/employe';
 import { Chantier } from '../types/pointage';
 import { Filiale, Fonction } from '../types/postes';
 import { CategorieProfessionnelle } from '../types/categoriesProfessionnelles';
@@ -587,12 +587,18 @@ export function Employes() {
             </div>
             <div>
               <label className={LABEL}>Mode de paiement</label>
-              <input
+              <select
                 value={champs.modePaiement}
                 onChange={(e) => majChamp('modePaiement', e.target.value)}
-                placeholder="Espèces, virement…"
                 className={CHAMP}
-              />
+              >
+                <option value="">Sélectionner…</option>
+                {OPTIONS_MODE_PAIEMENT.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label className={LABEL}>Lieu d'affectation par défaut</label>

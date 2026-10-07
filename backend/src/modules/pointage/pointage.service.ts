@@ -65,6 +65,26 @@ export async function archiverChantier(id: string, actif: boolean): Promise<Chan
   return mapChantier(rows[0]);
 }
 
+// Suppression réelle réservée aux chantiers jamais utilisés (aucun employé affecté, aucun
+// pointage) — dans tous les autres cas, archiverChantier() est le bon outil : un chantier avec de
+// l'historique ne doit jamais disparaître (effectif, pointages, attestations qui le citent comme
+// lieu d'affectation). utilisateurs_chantiers n'est qu'un périmètre d'accès, pas de l'historique :
+// on le nettoie sans condition avant de supprimer.
+export async function supprimerChantier(id: string): Promise<void> {
+  const { rows: employes } = await pool.query('SELECT 1 FROM employes WHERE chantier_id = $1 LIMIT 1', [id]);
+  if (employes.length > 0) {
+    throw new ErreurApplicative(409, 'Ce chantier est affecté à au moins un employé — archivez-le au lieu de le supprimer.');
+  }
+  const { rows: pointages } = await pool.query('SELECT 1 FROM pointages_mensuels WHERE chantier_id = $1 LIMIT 1', [id]);
+  if (pointages.length > 0) {
+    throw new ErreurApplicative(409, 'Ce chantier a des pointages enregistrés — archivez-le au lieu de le supprimer.');
+  }
+
+  await pool.query('DELETE FROM utilisateurs_chantiers WHERE chantier_id = $1', [id]);
+  const { rowCount } = await pool.query('DELETE FROM chantiers WHERE id = $1', [id]);
+  if (rowCount === 0) throw new ErreurApplicative(404, 'Chantier introuvable');
+}
+
 function mapPointageMensuel(l: Record<string, unknown>): PointageMensuel {
   return {
     id: l.id as string,

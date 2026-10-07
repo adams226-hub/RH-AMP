@@ -61,6 +61,7 @@ interface DonneesBulletinPdf {
 
   cumulConges: number;
   congesPris: number;
+  joursDeduits: number;
   soldeConges: number;
 }
 
@@ -70,9 +71,13 @@ interface DonneesBulletinPdf {
 // Congés : année de référence = année de la période du bulletin (cf. décision produit, pas de
 // report d'historique antérieur à 2026) — LEFT JOIN ; si aucun solde n'a encore été initialisé
 // cette année, repli sur le cumul annuel standard (30 j, 0 pris) plutôt que sur une case vide.
-// SOLDE = CUMUL CONGÉS − CONGÉS PRIS, recalculé ici (pas repris de soldes_conges.solde_disponible,
-// qui inclut aussi les déductions du module Absences — non affichées séparément sur ce bulletin,
-// donc l'identité visuelle CUMUL − PRIS = SOLDE doit rester exacte).
+// SOLDE = CUMUL CONGÉS − CONGÉS PRIS − ABSENCES DÉDUITES, exactement la même formule que
+// soldes_conges.solde_disponible (source de vérité utilisée partout ailleurs dans l'app — fiche
+// employé, validation des demandes de congé). Avant, le bulletin ignorait les jours déduits par
+// le module Absences (absences hors barème imputées au congé) : il affichait un solde supérieur
+// au vrai solde disponible dès qu'un employé avait ce genre d'absence — corrigé en ajoutant la
+// 4e case "Absences déduites" ci-dessous, pour que l'arithmétique affichée reste exacte plutôt que
+// de cacher la déduction.
 async function chargerDonneesBulletin(id: string): Promise<DonneesBulletinPdf> {
   const { rows } = await pool.query(
     `SELECT b.*, e.matricule, e.nom AS employe_nom, e.prenoms AS employe_prenoms, e.banque, e.rib,
@@ -82,7 +87,8 @@ async function chargerDonneesBulletin(id: string): Promise<DonneesBulletinPdf> {
             f.secteur_activite AS filiale_secteur_activite,
             f.mentions_legales_bulletin AS filiale_mentions_legales_bulletin, f.logo_url AS filiale_logo_url,
             COALESCE(sc.solde_initial, 0) + COALESCE(sc.jours_acquis, 30) AS cumul_conges,
-            COALESCE(sc.jours_consommes, 0) AS conges_pris
+            COALESCE(sc.jours_consommes, 0) AS conges_pris,
+            COALESCE(sc.jours_deduits, 0) AS jours_deduits
      FROM bulletins_paie b
      JOIN employes e ON e.id = b.employe_id
      JOIN filiales f ON f.id = e.filiale_id
@@ -150,7 +156,8 @@ async function chargerDonneesBulletin(id: string): Promise<DonneesBulletinPdf> {
     netAPayer: Number(l.net_a_payer),
     cumulConges: Number(l.cumul_conges),
     congesPris: Number(l.conges_pris),
-    soldeConges: Number(l.cumul_conges) - Number(l.conges_pris),
+    joursDeduits: Number(l.jours_deduits),
+    soldeConges: Number(l.cumul_conges) - Number(l.conges_pris) - Number(l.jours_deduits),
   };
 }
 
@@ -231,9 +238,11 @@ export async function genererBulletinPdf(id: string): Promise<Buffer> {
   doc.font('Helvetica-Bold').fontSize(20).text(d.filialeRaisonSociale || d.filialeNom, xTexteEntete, 46, {
     width: xGauche + largeurTotale - xTexteEntete,
   });
-  // '' (chaîne vide, distincte de NULL) = demande explicite de ne rien afficher sous le nom de la
-  // filiale ; NULL = repli sur le texte générique du groupe, tant que rien n'a été renseigné.
-  const secteurActivite = d.filialeSecteurActivite ?? 'BTP - Génie-Civil - Équipements - Miniers - Import-Export';
+  // Pas de repli texte générique : "BTP - Génie-Civil - Équipements - Miniers - Import-Export"
+  // n'est pas un texte de groupe, c'est propre à AMP (configuré dans son secteur_activite) — il
+  // apparaissait à tort sur toutes les filiales sans secteur_activite renseigné (ex. ROMBAT, qui
+  // n'a pas cette activité). Rien ne s'affiche tant que la filiale n'a pas son propre texte.
+  const secteurActivite = d.filialeSecteurActivite;
   if (secteurActivite) {
     doc.font('Helvetica').fontSize(9).fillColor('#555').text(secteurActivite, xTexteEntete, 75);
   }
@@ -380,19 +389,24 @@ export async function genererBulletinPdf(id: string): Promise<Buffer> {
 
   y += 8;
 
-  // Bloc congés — année de référence = année de la période du bulletin (cf. décision produit)
-  const largeurTiers = largeurTotale / 3;
+  // Bloc congés — année de référence = année de la période du bulletin (cf. décision produit).
+  // 4 cases (pas 3) : la case "Absences déduites" rend visible la part du solde consommée par le
+  // module Absences (hors barème imputé au congé), pour que CUMUL − PRIS − DÉDUITES = SOLDE reste
+  // vrai à l'oeil plutôt que de cacher cette déduction.
+  const largeurQuart = largeurTotale / 4;
   doc.rect(xGauche, y, largeurTotale, 16).fillColor('#e2e2e2').fill();
   doc.fillColor('#000').font('Helvetica-Bold').fontSize(8.5);
-  doc.text('CUMUL CONGÉS', xGauche, y + 4, { width: largeurTiers, align: 'center' });
-  doc.text('CONGÉS PRIS', xGauche + largeurTiers, y + 4, { width: largeurTiers, align: 'center' });
-  doc.text('SOLDE', xGauche + 2 * largeurTiers, y + 4, { width: largeurTiers, align: 'center' });
+  doc.text('CUMUL CONGÉS', xGauche, y + 4, { width: largeurQuart, align: 'center' });
+  doc.text('CONGÉS PRIS', xGauche + largeurQuart, y + 4, { width: largeurQuart, align: 'center' });
+  doc.text('ABSENCES DÉDUITES', xGauche + 2 * largeurQuart, y + 4, { width: largeurQuart, align: 'center' });
+  doc.text('SOLDE', xGauche + 3 * largeurQuart, y + 4, { width: largeurQuart, align: 'center' });
   y += 16;
   doc.rect(xGauche, y, largeurTotale, 16).strokeColor('#000').stroke();
   doc.font('Helvetica').fontSize(10);
-  doc.text(formaterMontant(d.cumulConges), xGauche, y + 3, { width: largeurTiers, align: 'center' });
-  doc.text(formaterMontant(d.congesPris), xGauche + largeurTiers, y + 3, { width: largeurTiers, align: 'center' });
-  doc.text(formaterMontant(d.soldeConges, true), xGauche + 2 * largeurTiers, y + 3, { width: largeurTiers, align: 'center' });
+  doc.text(formaterMontant(d.cumulConges), xGauche, y + 3, { width: largeurQuart, align: 'center' });
+  doc.text(formaterMontant(d.congesPris), xGauche + largeurQuart, y + 3, { width: largeurQuart, align: 'center' });
+  doc.text(formaterMontant(d.joursDeduits), xGauche + 2 * largeurQuart, y + 3, { width: largeurQuart, align: 'center' });
+  doc.text(formaterMontant(d.soldeConges, true), xGauche + 3 * largeurQuart, y + 3, { width: largeurQuart, align: 'center' });
   y += 16;
 
   // Bloc récapitulatif fiscal — 4 cases sur une ligne (3 fiscales + net à payer), largeurs
@@ -456,7 +470,24 @@ export async function genererBulletinPdf(id: string): Promise<Buffer> {
   // finissent toutes les deux juste au-dessus de la marge basse, sans déborder sur une 2e page.
   const hauteurLignePied = 9;
   const yDepartPied = 833 - piedTexteLignes.length * hauteurLignePied;
-  doc.font('Helvetica').fontSize(7.5).fillColor('#999');
+  doc.font('Helvetica');
+
+  // Réduit la taille jusqu'à ce que chaque ligne tienne sur une seule ligne visuelle — sans ça,
+  // une ligne de mentions trop longue (regroupement demandé sur moins de lignes, ex. ROMBAT en 2
+  // au lieu de 4) retourne à la ligne automatiquement dans pdfkit, ce qui déclenche le saut de
+  // page automatique connu (texte perdu sur une page 2 quasi vide, cf. commentaires plus haut) —
+  // testé, confirmé, corrigé ainsi plutôt qu'en ajustant le texte filiale par filiale.
+  const TAILLE_PIED_BASE = 7.5;
+  const TAILLE_PIED_MIN = 6;
+  let taillePied = TAILLE_PIED_BASE;
+  while (
+    taillePied > TAILLE_PIED_MIN &&
+    piedTexteLignes.some((ligne) => doc.fontSize(taillePied).widthOfString(ligne) > largeurTotale)
+  ) {
+    taillePied -= 0.5;
+  }
+
+  doc.fontSize(taillePied).fillColor('#999');
   piedTexteLignes.forEach((ligne, i) => {
     doc.text(ligne, xGauche, yDepartPied + i * hauteurLignePied, { width: largeurTotale, align: 'center' });
   });

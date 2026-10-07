@@ -902,6 +902,19 @@ function SectionChantiers() {
     }
   }
 
+  // Le backend refuse (409) si le chantier a un employé affecté ou des pointages — dans ce cas le
+  // message renvoyé invite déjà à archiver à la place, affiché tel quel.
+  async function supprimer(c: Chantier) {
+    if (!jeton) return;
+    if (!window.confirm(`Supprimer définitivement le chantier « ${c.nom} » ? Cette action est irréversible.`)) return;
+    try {
+      await api.supprimerChantier(jeton, c.id);
+      rafraichir();
+    } catch (e) {
+      setErreur(e instanceof ErreurApi ? e.message : 'Erreur lors de la suppression');
+    }
+  }
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <h3 className="mb-1 text-sm font-semibold text-slate-800">Lieux d'affectation (chantiers)</h3>
@@ -942,6 +955,11 @@ function SectionChantiers() {
                   {peutArchiver && (
                     <button onClick={() => basculer(c)} className="text-xs text-slate-500 hover:underline">
                       {c.actif ? 'Archiver' : 'Réactiver'}
+                    </button>
+                  )}
+                  {peutArchiver && (
+                    <button onClick={() => supprimer(c)} className="text-xs text-red-600 hover:underline">
+                      Supprimer
                     </button>
                   )}
                 </span>

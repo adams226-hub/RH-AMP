@@ -53,6 +53,7 @@ export function Paie() {
   const [elementsEmployeId, setElementsEmployeId] = useState('');
   const [elementsPeriode, setElementsPeriode] = useState(() => new Date().toISOString().slice(0, 7));
   const [autresIndemnites, setAutresIndemnites] = useState('0');
+  const [heuresSupForfait, setHeuresSupForfait] = useState('0');
   const [avanceAcompte, setAvanceAcompte] = useState('0');
   const [primePanier, setPrimePanier] = useState('0');
   const [primeSalissure, setPrimeSalissure] = useState('0');
@@ -112,6 +113,7 @@ export function Paie() {
     api.listerElementsVariablesEmploye(jeton, elementsEmployeId, `${elementsPeriode}-01`).then((liste) => {
       const parType = new Map(liste.map((l) => [l.type, l]));
       setAutresIndemnites(String(parType.get('prime')?.montant ?? 0));
+      setHeuresSupForfait(String(parType.get('heure_sup_forfait')?.montant ?? 0));
       setAvanceAcompte(String(parType.get('avance')?.montant ?? 0));
       setPrimePanier(String(parType.get('panier')?.montant ?? 0));
       setPrimeSalissure(String(parType.get('prime_salissure')?.montant ?? 0));
@@ -135,6 +137,7 @@ export function Paie() {
       const periodeIso = `${elementsPeriode}-01`;
       await Promise.all([
         api.enregistrerElementVariable(jeton, { employeId: elementsEmployeId, periode: periodeIso, type: 'prime', montant: Number(autresIndemnites) }),
+        api.enregistrerElementVariable(jeton, { employeId: elementsEmployeId, periode: periodeIso, type: 'heure_sup_forfait', montant: Number(heuresSupForfait) }),
         api.enregistrerElementVariable(jeton, { employeId: elementsEmployeId, periode: periodeIso, type: 'avance', montant: Number(avanceAcompte) }),
         api.enregistrerElementVariable(jeton, { employeId: elementsEmployeId, periode: periodeIso, type: 'panier', montant: Number(primePanier) }),
         api.enregistrerElementVariable(jeton, { employeId: elementsEmployeId, periode: periodeIso, type: 'prime_salissure', montant: Number(primeSalissure) }),
@@ -258,6 +261,11 @@ export function Paie() {
             À saisir avant de lancer un calcul (individuel ou en masse) — repris automatiquement, y compris par le
             calcul en masse par filiale.
           </p>
+          <p className="mb-3 text-xs text-alerte-700">
+            « Heures sup (forfait) » : pour un employé payé à un montant fixe (ex. cadre, manœuvre), pas au calcul
+            horaire. Si renseigné (différent de 0), ce montant remplace entièrement les heures sup calculées depuis
+            le pointage ce mois-ci — il ne s'y ajoute jamais.
+          </p>
           <div className="mb-3 flex flex-wrap items-end gap-3">
             <div className="min-w-[220px]">
               <label className={LABEL}>Employé</label>
@@ -283,6 +291,15 @@ export function Paie() {
                     type="number"
                     value={autresIndemnites}
                     onChange={(e) => setAutresIndemnites(e.target.value)}
+                    className={CHAMP}
+                  />
+                </div>
+                <div>
+                  <label className={LABEL}>Heures sup (forfait)</label>
+                  <input
+                    type="number"
+                    value={heuresSupForfait}
+                    onChange={(e) => setHeuresSupForfait(e.target.value)}
                     className={CHAMP}
                   />
                 </div>

@@ -8,6 +8,7 @@ import { useAuth } from '../context/AuthContext';
 import { Filiale } from '../types/postes';
 import { Chantier } from '../types/pointage';
 import { CyclePaie as CycleMensuel, ResumeCyclePaie, StatutCyclePaie } from '../types/cyclesPaie';
+import { OPTIONS_MODE_PAIEMENT } from '../types/employe';
 
 function formaterDateFr(date: string | null): string {
   return date ? new Date(date).toLocaleDateString('fr-FR') : '-';
@@ -62,6 +63,11 @@ export function CyclePaie() {
   const [chantiers, setChantiers] = useState<Chantier[]>([]);
   const [filtreChantier, setFiltreChantier] = useState('');
 
+  // Filtres appliqués au Journal de Paie téléchargé (distincts du filtre de la liste des cycles
+  // ci-dessus) — restreignent les lignes du fichier, pas juste l'affichage de l'écran.
+  const [exportModePaiement, setExportModePaiement] = useState('');
+  const [exportChantierId, setExportChantierId] = useState('');
+
   useEffect(() => {
     if (!jeton) return;
     api.listerFiliales(jeton).then((liste) => {
@@ -113,11 +119,19 @@ export function CyclePaie() {
     setAction(groupePar ? 'journal-groupe' : 'journal');
     setErreur(null);
     try {
-      const blob = await api.telechargerJournalPaie(jeton, filialeId, `${periode}-01`, groupePar);
+      const blob = await api.telechargerJournalPaie(
+        jeton,
+        filialeId,
+        `${periode}-01`,
+        groupePar,
+        exportModePaiement || undefined,
+        exportChantierId || undefined
+      );
       const url = URL.createObjectURL(blob);
       const lien = document.createElement('a');
       lien.href = url;
-      lien.download = `journal-paie-${periode}${groupePar ? '-par-mode-paiement' : ''}.xlsx`;
+      const suffixeFiltre = [exportModePaiement, exportChantierId ? 'chantier' : ''].filter(Boolean).join('-');
+      lien.download = `journal-paie-${periode}${groupePar ? '-par-mode-paiement' : ''}${suffixeFiltre ? `-${suffixeFiltre}` : ''}.xlsx`;
       lien.click();
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
       rafraichir();
@@ -199,7 +213,36 @@ export function CyclePaie() {
           {!peutGerer ? (
             <p className="text-sm text-slate-500">Lecture seule — seuls RH filiale / DRH / super admin peuvent piloter ce cycle.</p>
           ) : (
-            <div className="flex flex-wrap gap-3">
+            <>
+              {(resume.statut === 'verifie' || resume.statut === 'exporte') && (
+                <div className="mb-3 flex flex-wrap items-end gap-3">
+                  <div>
+                    <label className={LABEL}>Filtrer le téléchargement par mode de paiement</label>
+                    <select value={exportModePaiement} onChange={(e) => setExportModePaiement(e.target.value)} className={CHAMP}>
+                      <option value="">Tous les modes</option>
+                      {OPTIONS_MODE_PAIEMENT.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={LABEL}>Filtrer par chantier</label>
+                    <select value={exportChantierId} onChange={(e) => setExportChantierId(e.target.value)} className={CHAMP}>
+                      <option value="">Tous les chantiers</option>
+                      {chantiers
+                        .filter((c) => c.filialeId === filialeId)
+                        .map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.nom}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+              <div className="flex flex-wrap gap-3">
               {resume.statut === 'ouvert' && (
                 <button
                   disabled={action !== null}
@@ -284,7 +327,8 @@ export function CyclePaie() {
                   )}
                 </>
               )}
-            </div>
+              </div>
+            </>
           )}
         </div>
       ) : null}

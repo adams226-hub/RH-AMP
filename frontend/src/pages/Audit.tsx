@@ -14,8 +14,6 @@ import { Table } from '../components/Table';
 import { useAuth } from '../context/AuthContext';
 import { EntreeAudit } from '../types/audit';
 
-const BOUTON =
-  'rounded-md bg-primary-700 px-4 py-2 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-800 hover:shadow-md disabled:pointer-events-none disabled:opacity-60';
 const CHAMP =
   'rounded-md border border-slate-300 px-2.5 py-1.5 text-sm transition-colors duration-200 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100';
 
@@ -305,7 +303,6 @@ export function Audit() {
   const [recherche, setRecherche] = useState('');
   const [dateDebut, setDateDebut] = useState('');
   const [dateFin, setDateFin] = useState('');
-  const [exportEnCours, setExportEnCours] = useState(false);
   const [entreeSelectionnee, setEntreeSelectionnee] = useState<EntreeAudit | null>(null);
   const [referentiels, setReferentiels] = useState<Referentiels>(REFERENTIELS_VIDES);
 
@@ -362,31 +359,6 @@ export function Audit() {
 
   useEffect(() => setPage(1), [filtreModule, filtreAction, recherche, dateDebut, dateFin]);
 
-  async function telechargerExcel() {
-    if (!jeton) return;
-    setExportEnCours(true);
-    setErreur(null);
-    try {
-      const blob = await api.exporterJournalAuditExcel(jeton, {
-        module: filtreModule || undefined,
-        action: filtreAction || undefined,
-        recherche: recherche.trim() || undefined,
-        dateDebut: dateDebut || undefined,
-        dateFin: dateFin || undefined,
-      });
-      const url = URL.createObjectURL(blob);
-      const lien = document.createElement('a');
-      lien.href = url;
-      lien.download = 'journal-audit.xlsx';
-      lien.click();
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    } catch (e) {
-      setErreur(e instanceof ErreurApi ? e.message : "Erreur lors de l'export Excel");
-    } finally {
-      setExportEnCours(false);
-    }
-  }
-
   if (role !== null && role !== 'super_admin') {
     return <AccesRestreint />;
   }
@@ -395,15 +367,7 @@ export function Audit() {
 
   return (
     <MiseEnPage>
-      <PageHeader
-        titre="Journal d'audit"
-        sousTitre={`${total} action(s) enregistrée(s)`}
-        actions={
-          <button type="button" disabled={exportEnCours} onClick={telechargerExcel} className={BOUTON}>
-            {exportEnCours ? 'Génération...' : 'Télécharger en Excel'}
-          </button>
-        }
-      />
+      <PageHeader titre="Journal d'audit" sousTitre={`${total} action(s) enregistrée(s)`} />
 
       {erreur && <div className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{erreur}</div>}
 

@@ -69,12 +69,14 @@ export async function journal(req: Request, res: Response) {
   const filialeId = req.query.filialeId as string;
   const periode = req.query.periode as string;
   const groupePar = req.query.groupePar as 'mode_paiement' | undefined;
+  const modePaiement = (req.query.modePaiement as string | undefined) || undefined;
+  const chantierId = (req.query.chantierId as string | undefined) || undefined;
   if (!filialeId || !periode) {
     throw new ErreurApplicative(400, 'Les paramètres filialeId et periode sont requis');
   }
   verifierPerimetreFiliale(req, filialeId);
 
-  const { buffer, nomFichier } = await genererJournalPaie(filialeId, periode, groupePar);
+  const { buffer, nomFichier } = await genererJournalPaie(filialeId, periode, groupePar, modePaiement, chantierId);
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', `attachment; filename="${nomFichier}"`);
   res.send(Buffer.from(buffer));

@@ -4,7 +4,6 @@ import { authentification } from '../../middleware/authentification';
 import { autoriserRoles } from '../../middleware/autorisation';
 import {
   bareme,
-  demandeFiche,
   demandesAvis,
   demandesCreer,
   demandesDecision,
@@ -24,7 +23,6 @@ routesAbsences.get('/demandes', asyncHandler(demandesListe));
 routesAbsences.get('/export-excel', asyncHandler(exportExcel));
 routesAbsences.post('/demandes', asyncHandler(demandesCreer));
 routesAbsences.put('/demandes/:id', asyncHandler(demandesModifier));
-routesAbsences.get('/demandes/:id/fiche', asyncHandler(demandeFiche));
 routesAbsences.post(
   '/demandes/:id/avis',
   autoriserRoles('chef_service', 'super_admin'),

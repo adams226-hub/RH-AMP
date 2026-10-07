@@ -425,7 +425,6 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ decision, classification }) },
       jeton
     ),
-  obtenirFicheAbsencePdf: (jeton: string, id: string) => requeteBlob(`/api/absences/demandes/${id}/fiche`, jeton),
   exporterAbsencesExcel: (jeton: string) => requeteBlob('/api/absences/export-excel', jeton),
 
   // Missions (outil de suivi départ/retour, statut calculé)
@@ -461,6 +460,10 @@ export const api = {
     requete<Chantier>(`/api/pointage/chantiers/${id}`, { method: 'PATCH', body: JSON.stringify({ nom }) }, jeton),
   archiverChantier: (jeton: string, id: string, actif: boolean) =>
     requete<Chantier>(`/api/pointage/chantiers/${id}/statut`, { method: 'POST', body: JSON.stringify({ actif }) }, jeton),
+  // Réservé aux chantiers jamais utilisés (aucun employé affecté, aucun pointage) — le backend
+  // renvoie 409 sinon ; archiverChantier reste le bon outil pour un chantier avec de l'historique.
+  supprimerChantier: (jeton: string, id: string) =>
+    requete<void>(`/api/pointage/chantiers/${id}`, { method: 'DELETE' }, jeton),
   listerEmployesChantier: (jeton: string, chantierId: string, moisPaie: string) =>
     requete<EmployeAvecPointage[]>(`/api/pointage/chantiers/${chantierId}/employes?moisPaie=${moisPaie}`, {}, jeton),
   listerFichesPointage: (jeton: string, statut?: string, moisPaie?: string, chantierId?: string) => {
@@ -587,11 +590,20 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ filialeId, periode }) },
       jeton
     ),
-  telechargerJournalPaie: (jeton: string, filialeId: string, periode: string, groupePar?: 'mode_paiement') =>
-    requeteBlob(
-      `/api/cycles-paie/journal?filialeId=${filialeId}&periode=${periode}${groupePar ? `&groupePar=${groupePar}` : ''}`,
-      jeton
-    ),
+  telechargerJournalPaie: (
+    jeton: string,
+    filialeId: string,
+    periode: string,
+    groupePar?: 'mode_paiement',
+    modePaiement?: string,
+    chantierId?: string
+  ) => {
+    const params = new URLSearchParams({ filialeId, periode });
+    if (groupePar) params.set('groupePar', groupePar);
+    if (modePaiement) params.set('modePaiement', modePaiement);
+    if (chantierId) params.set('chantierId', chantierId);
+    return requeteBlob(`/api/cycles-paie/journal?${params}`, jeton);
+  },
 
   // Catégories professionnelles (référentiel, gère l'abattement IUTS via estCadre)
   listerCategoriesProfessionnelles: (jeton: string, visiblesUniquement = false) =>
@@ -675,14 +687,6 @@ export const api = {
     const query = construireParametresAudit(params);
     return requete<ResultatAudit>(`/api/audit/journal?${query.toString()}`, {}, jeton);
   },
-  exporterJournalAuditExcel: (
-    jeton: string,
-    params: { module?: string; action?: string; recherche?: string; dateDebut?: string; dateFin?: string }
-  ) => {
-    const query = construireParametresAudit(params);
-    return requeteBlob(`/api/audit/export-excel?${query.toString()}`, jeton);
-  },
-
   // Utilisateurs
   listerUtilisateurs: (jeton: string) => requete<Utilisateur[]>('/api/utilisateurs', {}, jeton),
   creerUtilisateur: (jeton: string, donnees: CreationUtilisateur) =>

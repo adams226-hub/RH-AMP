@@ -1,5 +1,4 @@
 import { Request, Response } from 'express';
-import { genererExportExcelAudit } from './audit.excel';
 import { listerJournal } from './audit.service';
 
 function lireFiltresCommuns(req: Request) {
@@ -20,12 +19,4 @@ export async function journal(req: Request, res: Response) {
   const resultat = await listerJournal({ ...lireFiltresCommuns(req), page, parPage });
 
   res.json(resultat);
-}
-
-export async function exportExcel(req: Request, res: Response) {
-  const buffer = await genererExportExcelAudit(lireFiltresCommuns(req));
-
-  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  res.setHeader('Content-Disposition', 'attachment; filename="journal-audit.xlsx"');
-  res.send(Buffer.from(buffer));
 }

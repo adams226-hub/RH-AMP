@@ -4,7 +4,7 @@ import { ClassificationAbsence, TypeDemandeAbsence } from './absences.types';
 
 const LIBELLES_TYPE: Record<TypeDemandeAbsence, string> = {
   permission_exceptionnelle: 'Permission exceptionnelle',
-  absence_hors_bareme: 'Absence hors barème',
+  absence_hors_bareme: 'Autre absence',
 };
 
 const LIBELLES_CLASSIFICATION: Record<ClassificationAbsence, string> = {

@@ -81,6 +81,56 @@ describe('calculerBulletinPaie — bulletins réels', () => {
   });
 });
 
+describe('calculerBulletinPaie — heures sup au forfait (demande explicite)', () => {
+  const employe: Employe = {
+    salaireDeBase: 150000,
+    indemniteLogement: 0,
+    indemniteTransport: 0,
+    indemniteSujetion: 0,
+    indemniteAstreinte: 0,
+    indemniteFonction: 0,
+    sursalaire: 0,
+    dateEntree: DATE_REFERENCE,
+    categorie: 'CADRE',
+    declarationCnss: 'O',
+    personnesACharge: 0,
+  };
+
+  test('le forfait remplace le calcul horaire, il ne s’y ajoute jamais', () => {
+    // Avec heures horaires seules (pas de forfait) : total = heures calculées depuis le pointage.
+    const sansForfait = calculerBulletinPaie(
+      employe,
+      { ...ELEMENTS_SANS_AJUSTEMENT, heuresSupplementaires: { taux15: 10, taux35: 0, taux50: 0, taux60: 0, taux120: 0 } },
+      TAUX_CONNUS
+    );
+    expect(sansForfait.totalHeuresSupplementaires).toBeGreaterThan(0);
+
+    // Avec forfait ET heures horaires saisies en même temps : le forfait doit l'emporter seul,
+    // pas s'additionner aux heures horaires.
+    const avecForfaitEtHoraire = calculerBulletinPaie(
+      employe,
+      {
+        ...ELEMENTS_SANS_AJUSTEMENT,
+        heuresSupplementaires: { taux15: 10, taux35: 0, taux50: 0, taux60: 0, taux120: 0 },
+        heuresSupplementairesForfaitaires: 50000,
+      },
+      TAUX_CONNUS
+    );
+    expect(avecForfaitEtHoraire.totalHeuresSupplementaires).toBe(50000);
+    expect(avecForfaitEtHoraire.heuresSupplementaires).toEqual([]);
+    expect(avecForfaitEtHoraire.remunerationTotale).toBe(sansForfait.remunerationTotale - sansForfait.totalHeuresSupplementaires + 50000);
+  });
+
+  test('sans forfait (0), le calcul horaire reste inchangé', () => {
+    const resultat = calculerBulletinPaie(
+      employe,
+      { ...ELEMENTS_SANS_AJUSTEMENT, heuresSupplementaires: { taux15: 10, taux35: 0, taux50: 0, taux60: 0, taux120: 0 } },
+      TAUX_CONNUS
+    );
+    expect(resultat.heuresSupplementaires.length).toBeGreaterThan(0);
+  });
+});
+
 describe('calculerBrutDepuisNet — calcul inverse (ADDENDUM §6)', () => {
   test('retrouve le salaire de base de ZALE IDRISSA à partir du net 69 440', () => {
     const employeSansBase: Employe = {

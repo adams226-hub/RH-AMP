@@ -9,6 +9,10 @@ export type TypeElementSaisissable =
   | 'trop_percu'
   | 'heure_sup_50'
   | 'heure_sup_120'
+  // Montant forfaitaire mensuel remplaçant le calcul horaire (cadres/manœuvres au forfait,
+  // demande explicite) — jamais additionné aux heures sup calculées depuis le pointage, cf.
+  // calculerBulletinPaie.ts (l'un ou l'autre, pas les deux).
+  | 'heure_sup_forfait'
   | 'prime_salissure'
   | 'prime_lait';
 

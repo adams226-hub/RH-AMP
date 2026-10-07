@@ -42,6 +42,9 @@ CREATE TYPE statut_cycle_paie AS ENUM ('ouvert', 'calcule', 'verifie', 'exporte'
 CREATE TYPE type_element_variable AS ENUM (
     'heure_sup', 'prime', 'avance', 'absence_injustifiee', 'panier', 'reliquat', 'trop_percu',
     'heure_sup_15', 'heure_sup_35', 'heure_sup_50', 'heure_sup_60', 'heure_sup_120',
+    -- Montant forfaitaire mensuel remplaçant le calcul horaire (employé au forfait, ex. cadre,
+    -- manœuvre) — jamais additionné aux heure_sup_* ci-dessus, cf. calculerBulletinPaie.ts.
+    'heure_sup_forfait',
     'prime_salissure', 'prime_lait'
 );
 

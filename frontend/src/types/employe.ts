@@ -1,5 +1,9 @@
 export type StatutEmploye = 'en_cours_creation' | 'actif' | 'suspendu' | 'sorti';
 
+// Liste fermée (demande explicite) — réutilisée telle quelle par le filtre du Cycle de paie, pour
+// que les valeurs filtrables correspondent exactement à celles saisissables sur la fiche employé.
+export const OPTIONS_MODE_PAIEMENT = ['Banque', 'Caisse', 'Espèces'] as const;
+
 export interface Employe {
   id: string;
   matricule: string;

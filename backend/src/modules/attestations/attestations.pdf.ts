@@ -147,10 +147,10 @@ function paragraphesAttStage(d: DonneesAttestationStage): string[] {
 // avec le vrai document téléchargé) : page au format PAYSAGE (pas portrait), double-cadre orange à
 // coins droits (pas une simple ligne arrondie), barre grise décorative au-dessus du logo (absente
 // du fichier logo lui-même — c'est un élément de mise en page du modèle Word, pas de l'image),
-// filigrane diagonal au nom de la filiale, pas de N° affiché, nom/fonction du dirigeant et nom de
-// l'entreprise en gras dans le 1er paragraphe, pas de ligne "Le {fonction}" avant la signature,
-// mentions légales en pied de page en italique. Le texte légal (durée d'emploi + liste des postes,
-// cf. suiteCertTrav) reste inchangé — seule la mise en page copie la maquette.
+// pas de N° affiché, nom/fonction du dirigeant et nom de l'entreprise en gras dans le 1er
+// paragraphe, pas de ligne "Le {fonction}" avant la signature, mentions légales en pied de page en
+// italique. Le texte légal (durée d'emploi + liste des postes, cf. suiteCertTrav) reste inchangé —
+// seule la mise en page copie la maquette. Filigrane retiré par la suite (demande explicite).
 function dessinerCertTrav(
   doc: InstanceType<typeof PDFDocument>,
   d: DonneesPdf,
@@ -176,22 +176,6 @@ function dessinerCertTrav(
     .lineWidth(1)
     .strokeColor(couleur)
     .stroke();
-
-  // Filigrane diagonal en fond de page — raison sociale complète (demande explicite : "African
-  // Mining Partenair SA", pas juste "AMP"), repli sur le nom court si la raison sociale n'est pas
-  // encore renseignée pour la filiale (Paramètres > Référentiels). Dessiné avant le reste du
-  // contenu pour rester dessous.
-  const texteFiligrane = d.filialeRaisonSociale || d.filialeNom;
-  doc.save();
-  doc.opacity(0.1);
-  doc
-    .rotate(-30, { origin: [largeurPage / 2, hauteurPage / 2] })
-    .font('Helvetica-Bold')
-    .fontSize(32)
-    .fillColor('#555')
-    .text(texteFiligrane, 0, hauteurPage / 2 - 16, { width: largeurPage, align: 'center' });
-  doc.restore();
-  doc.opacity(1);
 
   // Barre grise décorative directement au-dessus du logo — absente du fichier logo lui-même
   // (vérifié : le PNG stocké ne contient que le pictogramme + le nom), c'est un élément de mise en
@@ -231,7 +215,7 @@ function dessinerCertTrav(
   // doubles visibles autour de "certifie que"). Les autres paragraphes (un seul appel, une seule
   // police) restent en justify, qui fonctionne correctement dans ce cas.
   doc
-    .text('Je soussigné, ', xGauche, doc.y, { width: largeurTotale, align: 'left', continued: true })
+    .text('Je soussigné, ', xGauche, doc.y, { width: largeurTotale, align: 'left', lineGap: 5, continued: true })
     .font('Times-Bold')
     .text(`${donnees.nomDirigeant || '________________'}, `, { continued: true })
     .text(`${donnees.fonctionDirigeant || '________________'} `, { continued: true })
@@ -247,11 +231,11 @@ function dessinerCertTrav(
     'En foi de quoi, le présent certificat de travail lui est délivré pour servir et valoir ce que de droit.',
     xGauche,
     doc.y,
-    { width: largeurTotale, align: 'justify' }
+    { width: largeurTotale, align: 'justify', lineGap: 5 }
   );
 
   doc.moveDown(2.5);
-  doc.font('Times-Italic').fontSize(13).text(`Ouagadougou, le ${formaterDateFr(donnees.dateEmission)}`, xGauche, doc.y, {
+  doc.font('Times-Italic').fontSize(13).text(`Fait à Ouagadougou, le ${formaterDateFr(donnees.dateEmission)}`, xGauche, doc.y, {
     width: largeurTotale,
     align: 'right',
   });
@@ -419,12 +403,14 @@ export async function genererAttestationPdf(id: string): Promise<Buffer> {
       : paragraphesAttStage(d.donnees as DonneesAttestationStage);
 
   for (const p of paragraphes) {
-    doc.text(p, xGauche, doc.y, { width: largeurTotale, align: 'justify' });
+    // lineGap : interligne plus aéré à l'intérieur du paragraphe (demande explicite — le texte
+    // paraissait trop serré) ; moveDown juste après reste l'espacement ENTRE paragraphes.
+    doc.text(p, xGauche, doc.y, { width: largeurTotale, align: 'justify', lineGap: 5 });
     doc.moveDown(1.2);
   }
 
   doc.moveDown(2);
-  doc.font('Times-Roman').fontSize(13).text(`Ouagadougou, le ${formaterDateFr(d.donnees.dateEmission)}`, xGauche, doc.y, {
+  doc.font('Times-Roman').fontSize(13).text(`Fait à Ouagadougou, le ${formaterDateFr(d.donnees.dateEmission)}`, xGauche, doc.y, {
     width: largeurTotale,
     align: 'right',
   });

@@ -8,6 +8,7 @@ import {
   chantiersCreer,
   chantiersListe,
   chantiersRenommer,
+  chantiersSupprimer,
   fichesExportExcel,
   fichesListe,
   ficheAnomalies,
@@ -32,6 +33,7 @@ routesPointage.get('/chantiers', asyncHandler(chantiersListe));
 routesPointage.post('/chantiers', gestionnairesStructure, asyncHandler(chantiersCreer));
 routesPointage.patch('/chantiers/:id', gestionnairesStructure, asyncHandler(chantiersRenommer));
 routesPointage.post('/chantiers/:id/statut', admin, asyncHandler(chantiersArchiver));
+routesPointage.delete('/chantiers/:id', admin, asyncHandler(chantiersSupprimer));
 routesPointage.get('/chantiers/:id/employes', saisieChantier, asyncHandler(chantierEmployes));
 
 routesPointage.get('/fiches', saisieChantier, asyncHandler(fichesListe));

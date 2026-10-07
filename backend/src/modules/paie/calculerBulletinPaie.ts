@@ -99,7 +99,12 @@ export interface ElementsVariables {
   /** Jours pris en compte ce mois-ci, sur la base 30 (cf. règle de prorata) */
   joursPrisEnCompte: number;
   heuresSupplementaires: HeuresSupplementairesSaisies;
-  /** Montant forfaitaire, composition non détaillée dans les règles fournies */
+  /**
+   * Montant forfaitaire mensuel (ex. 50 000 pour un cadre, 10 000 pour un manœuvre) qui REMPLACE
+   * le calcul horaire des heures sup pour les employés au forfait — jamais additionné (demande
+   * explicite, confirmée par l'utilisateur). Dès que ce montant est > 0, les heures sup saisies
+   * ci-dessus (taux15..taux120) sont ignorées par calculerBulletinPaie(), cf. plus bas.
+   */
   heuresSupplementairesForfaitaires: number;
   /** Composition non détaillée dans les règles fournies */
   autresIndemnites: number;
@@ -435,19 +440,28 @@ export function calculerBulletinPaie(
   const ancienneteAnnees = calculerAncienneteAnnees(employe.dateEntree, dateReference);
   const primeAnciennete = calculerPrimeAnciennete(employe.salaireDeBase, ancienneteAnnees);
 
-  // 3. Heures supplémentaires (taux horaire assis sur le salaire de base nominal)
-  const { lignes: heuresSupplementaires, total: totalHeuresSupplementaires } = calculerHeuresSupplementaires(
-    employe.salaireDeBase,
-    elementsVariables.heuresSupplementaires
-  );
+  // 3. Heures supplémentaires (taux horaire assis sur le salaire de base nominal) — REMPLACÉES
+  // (pas additionnées) par le forfait mensuel quand il est saisi : un employé au forfait
+  // (cadre/manœuvre, montant fixe décidé par la RH) n'a pas ses heures sup calculées depuis le
+  // pointage ce mois-là, demande explicite confirmée par l'utilisateur. D'où lignes = [] et
+  // totalHeuresSupplementaires = le forfait dans ce cas, pour que le détail HS15%..HS120% du
+  // bulletin reste cohérent avec le total affiché (tout à 0 sauf le forfait).
+  const { lignes: heuresSupplementairesHoraires, total: totalHeuresSupplementairesHoraires } =
+    calculerHeuresSupplementaires(employe.salaireDeBase, elementsVariables.heuresSupplementaires);
+  const utiliseForfaitHeuresSup = elementsVariables.heuresSupplementairesForfaitaires > 0;
+  const heuresSupplementaires = utiliseForfaitHeuresSup ? [] : heuresSupplementairesHoraires;
+  const totalHeuresSupplementaires = utiliseForfaitHeuresSup
+    ? elementsVariables.heuresSupplementairesForfaitaires
+    : totalHeuresSupplementairesHoraires;
 
-  // 4. Rémunération totale
+  // 4. Rémunération totale — heuresSupplementairesForfaitaires passé à 0 ici : déjà replié dans
+  // totalHeuresSupplementaires ci-dessus, l'additionner encore le compterait deux fois.
   const remunerationTotale = calculerRemunerationTotale(
     elementsProratises,
     totalHeuresSupplementaires,
     primeAnciennete,
     elementsVariables.autresIndemnites,
-    elementsVariables.heuresSupplementairesForfaitaires,
+    0,
     panier,
     primeSalissure,
     primeLait
@@ -473,13 +487,14 @@ export function calculerBulletinPaie(
   // 8. Abattement forfaitaire (sur montants proratisés)
   const tauxAbattement =
     employe.categorie === 'CADRE' ? tauxConfigurables.tauxAbattementCadre : tauxConfigurables.tauxAbattementNonCadre;
+  // heuresSupplementairesForfaitaires à 0 ici aussi — même raison qu'à l'étape 4.
   const abattementForfaitaire = calculerAbattementForfaitaire(
     tauxAbattement,
     elementsProratises.salaireDeBase,
     primeAnciennete,
     totalHeuresSupplementaires,
     elementsProratises.sursalaire,
-    elementsVariables.heuresSupplementairesForfaitaires
+    0
   );
 
   // 9. Salaire net imposable

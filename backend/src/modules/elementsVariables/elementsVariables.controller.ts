@@ -14,7 +14,7 @@ const schemaSaisie = z.object({
   periode: z.string(),
   type: z.enum([
     'prime', 'avance', 'panier', 'reliquat', 'absence_injustifiee', 'trop_percu',
-    'heure_sup_50', 'heure_sup_120', 'prime_salissure', 'prime_lait',
+    'heure_sup_50', 'heure_sup_120', 'heure_sup_forfait', 'prime_salissure', 'prime_lait',
   ]),
   montant: z.number().nonnegative().optional(),
   jours: z.number().nonnegative().optional(),

@@ -13,7 +13,6 @@ import {
   obtenirSoldePermission,
   traiterDecisionRh,
 } from './absences.service';
-import { genererFichePdf } from './absences.pdf';
 import { genererExportExcelAbsences } from './absences.excel';
 
 const schemaCreationDemande = z.object({
@@ -80,7 +79,7 @@ export async function exportExcel(req: Request, res: Response) {
   res.send(Buffer.from(buffer));
 }
 
-// Partagé fiche PDF / modification : propriétaire de la demande, ou dans le périmètre
+// Partagé avec la modification : propriétaire de la demande, ou dans le périmètre
 // filiale/chantier de qui la traite (même raisonnement que verifierAccesEmploye).
 async function verifierAccesDemande(req: Request, id: string): Promise<void> {
   const acces = await obtenirDemandePourAcces(id);
@@ -121,13 +120,4 @@ export async function demandesAvis(req: Request, res: Response) {
 export async function demandesDecision(req: Request, res: Response) {
   const { decision, classification, commentaire } = schemaDecision.parse(req.body);
   res.json(await traiterDecisionRh(req.params.id, decision, classification, commentaire));
-}
-
-export async function demandeFiche(req: Request, res: Response) {
-  await verifierAccesDemande(req, req.params.id);
-
-  const pdf = await genererFichePdf(req.params.id);
-  res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `inline; filename="autorisation-absence-${req.params.id}.pdf"`);
-  res.send(pdf);
 }

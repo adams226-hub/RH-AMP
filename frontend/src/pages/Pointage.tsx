@@ -44,6 +44,18 @@ function moisCourantISO() {
   return new Date().toISOString().slice(0, 7) + '-01';
 }
 
+// Premier/dernier jour du mois en cours, au format YYYY-MM-DD — sert de période par défaut
+// (demande explicite) : remplir le mois complet avant de soumettre, plutôt que des petits bouts
+// de dates qui, une fois soumis, bloquent toute saisie complémentaire pour le reste du mois
+// (la fiche passe "soumis" dès la première soumission, cf. enregistrerFiche côté backend).
+function premierEtDernierJourMoisCourant(): [string, string] {
+  const maintenant = new Date();
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  const premier = new Date(Date.UTC(maintenant.getFullYear(), maintenant.getMonth(), 1));
+  const dernier = new Date(Date.UTC(maintenant.getFullYear(), maintenant.getMonth() + 1, 0));
+  return [fmt(premier), fmt(dernier)];
+}
+
 // Code court uniquement dans le <select> de la grille — une cellule fait ~60-80px de large,
 // le libellé complet y déborde et se coupe (rendu cassé signalé par l'utilisateur). Le sens de
 // chaque code est donné par la légende sous la grille (LEGENDE_CODE_ABSENCE) plutôt que répété
@@ -84,8 +96,8 @@ export function Pointage() {
   // --- Saisie / soumission ---
   const [employeId, setEmployeId] = useState('');
   const [chantierId, setChantierId] = useState('');
-  const [periodeDebut, setPeriodeDebut] = useState('');
-  const [periodeFin, setPeriodeFin] = useState('');
+  const [periodeDebut, setPeriodeDebut] = useState(() => premierEtDernierJourMoisCourant()[0]);
+  const [periodeFin, setPeriodeFin] = useState(() => premierEtDernierJourMoisCourant()[1]);
   const [jours, setJours] = useState<Record<string, SaisieJour>>({});
   const [ficheCourante, setFicheCourante] = useState<PointageMensuelAvecDetails | null>(null);
   const [envoiEnCours, setEnvoiEnCours] = useState(false);
@@ -176,6 +188,12 @@ export function Pointage() {
     [periodeDebut, periodeFin]
   );
 
+  // Progression de remplissage de la période affichée — demande explicite : pouvoir voir que la
+  // période est entièrement couverte avant de soumettre, plutôt que de soumettre un bout (ex. 7
+  // au 9) et se retrouver bloqué pour compléter le reste du mois ensuite.
+  const joursPeriode = useMemo(() => semaines.flat().filter((d): d is string => d !== null), [semaines]);
+  const joursRemplis = joursPeriode.filter((d) => jours[d]?.heures || jours[d]?.codeAbsence).length;
+
   function definirHeures(date: string, valeur: string) {
     setJours((j) => ({ ...j, [date]: { heures: valeur, codeAbsence: valeur ? '' : (j[date]?.codeAbsence ?? '') } }));
   }
@@ -216,6 +234,14 @@ export function Pointage() {
 
   async function soumettre() {
     if (!jeton || !ficheCourante) return;
+    if (
+      joursRemplis < joursPeriode.length &&
+      !window.confirm(
+        `Seulement ${joursRemplis} jour(s) sur ${joursPeriode.length} sont remplis sur cette période. Une fois soumise, la fiche ne pourra plus être complétée pour le reste du mois sans passer par un rejet RH. Soumettre quand même ?`
+      )
+    ) {
+      return;
+    }
     setSoumissionEnCours(true);
     try {
       await api.soumettreFichePointage(jeton, ficheCourante.id);
@@ -618,9 +644,17 @@ export function Pointage() {
           )}
           {employeId && (
             <>
-              <p className="mb-3 text-[11px] text-slate-400">
+              <p className="mb-1 text-[11px] text-slate-400">
                 Heures sup., panier et absences sont calculés automatiquement depuis la grille, après enregistrement.
               </p>
+              {joursPeriode.length > 0 && (
+                <p className="mb-3 text-xs font-medium text-slate-600">
+                  {joursRemplis} / {joursPeriode.length} jour(s) remplis sur la période affichée
+                  {joursRemplis < joursPeriode.length
+                    ? ' — complétez avant de soumettre pour ne pas rester bloqué sur le reste du mois.'
+                    : ' — période complète.'}
+                </p>
+              )}
 
               <div className="flex gap-3">
                 <button disabled={envoiEnCours} className={BOUTON}>

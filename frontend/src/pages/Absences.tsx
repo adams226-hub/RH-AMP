@@ -54,7 +54,7 @@ const COULEURS_STATUT: Record<StatutDemandeConge, CouleurBadge> = {
 
 const LIBELLES_TYPE: Record<TypeDemandeAbsence, string> = {
   permission_exceptionnelle: 'Permission exceptionnelle',
-  absence_hors_bareme: 'Absence hors barème',
+  absence_hors_bareme: 'Autre absence',
 };
 
 const LIBELLES_CLASSIFICATION: Record<ClassificationAbsence, string> = {
@@ -62,17 +62,6 @@ const LIBELLES_CLASSIFICATION: Record<ClassificationAbsence, string> = {
   deductible_conge: 'Déductible des congés',
   sans_solde: 'Sans solde',
 };
-
-async function ouvrirFichePdf(jeton: string, id: string, surErreur: (message: string) => void) {
-  try {
-    const blob = await api.obtenirFicheAbsencePdf(jeton, id);
-    const url = URL.createObjectURL(blob);
-    window.open(url, '_blank');
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
-  } catch (e) {
-    surErreur(e instanceof ErreurApi ? e.message : 'Erreur lors de la génération de la fiche');
-  }
-}
 
 function TuileSolde({ libelle, valeur }: { libelle: string; valeur: number }) {
   return (
@@ -218,13 +207,9 @@ function FormulaireDemande({
 
 function LigneDemande({
   d,
-  jeton,
-  surErreur,
   onModifier,
 }: {
   d: DemandeAbsence;
-  jeton: string;
-  surErreur: (m: string) => void;
   onModifier?: () => void;
 }) {
   return (
@@ -257,12 +242,6 @@ function LigneDemande({
               Modifier
             </button>
           )}
-          <button
-            onClick={() => ouvrirFichePdf(jeton, d.id, surErreur)}
-            className="font-medium text-primary-700 transition-colors duration-200 hover:underline"
-          >
-            Fiche PDF
-          </button>
         </div>
       </td>
     </>
@@ -393,12 +372,7 @@ function VueEmploye({ jeton, employeId }: { jeton: string | null; employeId: str
             <tbody className="divide-y divide-slate-100">
               {demandes.map((d) => (
                 <tr key={d.id} className="transition-colors duration-200 hover:bg-slate-50">
-                  <LigneDemande
-                    d={d}
-                    jeton={jeton ?? ''}
-                    surErreur={setErreur}
-                    onModifier={() => setDemandeAModifier(d)}
-                  />
+                  <LigneDemande d={d} onModifier={() => setDemandeAModifier(d)} />
                 </tr>
               ))}
             </tbody>
@@ -633,7 +607,7 @@ function VueGestion({ jeton, role }: { jeton: string | null; role: string | null
         <div>
           <h2 className="text-lg font-semibold text-slate-900">Absences</h2>
           <p className="text-sm text-slate-500">
-            {demandes.length} demande(s) dans votre périmètre — permissions exceptionnelles et absences hors barème
+            {demandes.length} demande(s) dans votre périmètre — permissions exceptionnelles et autres absences
           </p>
         </div>
         <div className="flex gap-2">
@@ -806,14 +780,6 @@ function VueGestion({ jeton, role }: { jeton: string | null; role: string | null
                             </button>
                           </>
                         )}
-                        {jeton && (
-                          <button
-                            onClick={() => ouvrirFichePdf(jeton, d.id, setErreur)}
-                            className="font-medium text-primary-700 transition-colors duration-200 hover:underline"
-                          >
-                            Fiche PDF
-                          </button>
-                        )}
                       </div>
                     </td>
                   </tr>
@@ -828,7 +794,7 @@ function VueGestion({ jeton, role }: { jeton: string | null; role: string | null
             titre={demandes.length === 0 ? 'Aucune demande' : 'Aucun résultat'}
             message={
               demandes.length === 0
-                ? 'Les permissions exceptionnelles et absences hors barème apparaîtront ici.'
+                ? 'Les permissions exceptionnelles et autres absences apparaîtront ici.'
                 : 'Aucune demande ne correspond à votre recherche ou vos filtres.'
             }
           />

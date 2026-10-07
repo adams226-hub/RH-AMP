@@ -194,10 +194,29 @@ function tauxJournalier(salaireBaseNominal: number): number {
   return Math.round((salaireBaseNominal / 30) * 100) / 100;
 }
 
-async function obtenirLignesJournal(filialeId: string, periode: string): Promise<LigneJournal[]> {
+async function obtenirLignesJournal(
+  filialeId: string,
+  periode: string,
+  modePaiement?: string,
+  chantierId?: string
+): Promise<LigneJournal[]> {
   const tauxCnssPatronale = await obtenirParametre('taux_cnss_patronale');
   const tauxTpa = await obtenirParametre('taux_tpa');
   const PLAFOND_CNSS = 800_000;
+
+  const conditions = ['e.filiale_id = $1', "b.periode = date_trunc('month', $2::date)"];
+  const valeurs: unknown[] = [filialeId, periode];
+  if (modePaiement) {
+    valeurs.push(modePaiement);
+    conditions.push(`e.mode_paiement = $${valeurs.length}`);
+  }
+  if (chantierId) {
+    valeurs.push(chantierId);
+    // Même lieu d'affectation effectif que la colonne du journal (chantier du pointage validé du
+    // mois, sinon celui par défaut sur la fiche employé) — un filtre sur autre chose que ce qui
+    // est affiché serait trompeur.
+    conditions.push(`COALESCE(chp.id, chd.id) = $${valeurs.length}`);
+  }
 
   const { rows } = await pool.query(
     `SELECT b.*, c.salaire_base AS salaire_base_nominal, tj.salaire_base_mensuel,
@@ -217,9 +236,9 @@ async function obtenirLignesJournal(filialeId: string, periode: string): Promise
        ORDER BY date_debut DESC LIMIT 1
      ) c ON true
      LEFT JOIN taux_journaliers tj ON tj.employe_id = e.id
-     WHERE e.filiale_id = $1 AND b.periode = date_trunc('month', $2::date)
+     WHERE ${conditions.join(' AND ')}
      ORDER BY e.nom, e.prenoms`,
-    [filialeId, periode]
+    valeurs
   );
 
   return rows.map((l): LigneJournal => {
@@ -411,22 +430,28 @@ async function construireClasseur(
 export async function genererJournalPaie(
   filialeId: string,
   periode: string,
-  groupePar?: GroupePar
+  groupePar?: GroupePar,
+  modePaiement?: string,
+  chantierId?: string
 ): Promise<{ buffer: ExcelJS.Buffer; nomFichier: string }> {
   const cycle = await obtenirOuCreerCycle(filialeId, periode);
   if (!['verifie', 'exporte'].includes(cycle.statut)) {
     throw new ErreurApplicative(409, "Le cycle doit être au moins « vérifié » avant de générer le Journal de Paie");
   }
 
-  const lignes = await obtenirLignesJournal(filialeId, periode);
+  const lignes = await obtenirLignesJournal(filialeId, periode, modePaiement, chantierId);
   const buffer = await construireClasseur(lignes, periode, groupePar);
 
-  if (cycle.statut === 'verifie') {
+  // Un filtre appliqué (mode de paiement ou chantier) ne doit pas faire basculer le cycle en
+  // "exporté" — ce n'est qu'un extrait, pas l'export officiel complet qui marque le cycle.
+  if (cycle.statut === 'verifie' && !modePaiement && !chantierId) {
     await pool.query(`UPDATE cycles_paie SET statut = 'exporte', exporte_le = now(), updated_at = now() WHERE id = $1`, [
       cycle.id,
     ]);
   }
 
-  const suffixe = groupePar === 'mode_paiement' ? '-par-mode-paiement' : '';
-  return { buffer, nomFichier: `journal-paie-${periode}${suffixe}.xlsx` };
+  const suffixeGroupe = groupePar === 'mode_paiement' ? '-par-mode-paiement' : '';
+  const suffixeFiltre = [modePaiement, chantierId ? 'chantier' : null].filter(Boolean).join('-');
+  const nomFichier = `journal-paie-${periode}${suffixeGroupe}${suffixeFiltre ? `-${suffixeFiltre}` : ''}.xlsx`;
+  return { buffer, nomFichier };
 }

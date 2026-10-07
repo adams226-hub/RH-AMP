@@ -16,6 +16,7 @@ import {
   rejeter,
   renommerChantier,
   soumettre,
+  supprimerChantier,
   valider,
 } from './pointage.service';
 import { genererFichePointagePdf } from './pointage.pdf';
@@ -90,6 +91,11 @@ export async function chantiersRenommer(req: Request, res: Response) {
 export async function chantiersArchiver(req: Request, res: Response) {
   const { actif } = schemaStatutChantier.parse(req.body);
   res.json(await archiverChantier(req.params.id, actif));
+}
+
+export async function chantiersSupprimer(req: Request, res: Response) {
+  await supprimerChantier(req.params.id);
+  res.status(204).send();
 }
 
 // chantierId (filtre écran) restreint parmi les chantiers déjà autorisés — ne peut jamais élargir

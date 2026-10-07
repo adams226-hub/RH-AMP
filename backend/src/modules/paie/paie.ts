@@ -442,6 +442,7 @@ export async function calculerEtEnregistrerBulletin(elements: ElementsCalculBull
        AND type IN (
          'prime', 'avance', 'panier', 'reliquat', 'absence_injustifiee', 'trop_percu',
          'heure_sup_15', 'heure_sup_35', 'heure_sup_50', 'heure_sup_60', 'heure_sup_120',
+         'heure_sup_forfait',
          'prime_salissure', 'prime_lait'
        )
      GROUP BY type`,
@@ -545,7 +546,7 @@ export async function calculerEtEnregistrerBulletin(elements: ElementsCalculBull
           taux60: montantDuType('heure_sup_60'),
           taux120: montantDuType('heure_sup_120'),
         },
-        heuresSupplementairesForfaitaires: 0,
+        heuresSupplementairesForfaitaires: montantDuType('heure_sup_forfait'),
         autresIndemnites: montantDuType('prime'),
         // "Éléments du mois" n'a qu'une seule saisie "avance" : c'est ce qui est effectivement
         // retenu ce mois-ci, donc mappé sur retenuesAvancesDuMois (le seul terme utilisé par la

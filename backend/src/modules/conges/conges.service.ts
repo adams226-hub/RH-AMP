@@ -31,8 +31,12 @@ function mapSolde(l: Record<string, unknown>): SoldeConge {
   };
 }
 
-// Jours ouvrables (semaine de 6 jours : seuls dimanche et les jours fériés sont exclus — même
-// convention que le module Pointage, cf. pointage.calcul.ts) entre deux dates incluses.
+// Jours calendaires (le congé payé décompte tous les jours de la période, week-ends compris —
+// demande explicite : du 07/10/2026 au 15/10/2026 doit compter 9 jours, pas 8 ; l'ancienne règle
+// excluait le dimanche, ce qui donnait 8. Seuls les jours fériés restent exclus : un férié tombant
+// pendant le congé ne coûte pas de jour de solde). Diffère volontairement de la convention
+// "semaine de 6 jours" du module Pointage (jourSemaine !== 0), propre au calcul des jours
+// travaillés/payés, pas à un décompte de solde de congé.
 async function calculerNbJoursOuvres(client: PoolClient, dateDebut: string, dateFin: string): Promise<number> {
   const { rows: feries } = await client.query('SELECT date FROM jours_feries WHERE date BETWEEN $1 AND $2', [
     dateDebut,
@@ -45,10 +49,9 @@ async function calculerNbJoursOuvres(client: PoolClient, dateDebut: string, date
   const fin = new Date(dateFin);
 
   while (curseur <= fin) {
-    const jourSemaine = curseur.getDay();
     const iso = curseur.toISOString().slice(0, 10);
 
-    if (jourSemaine !== 0 && !datesFeriees.has(iso)) {
+    if (!datesFeriees.has(iso)) {
       nbJours += 1;
     }
 
