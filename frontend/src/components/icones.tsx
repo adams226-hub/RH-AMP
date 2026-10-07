@@ -179,3 +179,19 @@ export function IconeChevronBas(props: Props) {
     </svg>
   );
 }
+
+export function IconeMenu(props: Props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M4 7h16M4 12h16M4 17h16" />
+    </svg>
+  );
+}
+
+export function IconeFermer(props: Props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M18 6L6 18M6 6l12 12" />
+    </svg>
+  );
+}

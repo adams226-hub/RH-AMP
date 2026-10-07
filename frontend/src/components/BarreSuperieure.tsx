@@ -4,7 +4,7 @@ import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { Filiale } from '../types/postes';
 import { GROUPES } from '../nav';
-import { IconeChevronBas, IconeDeconnexion } from './icones';
+import { IconeChevronBas, IconeDeconnexion, IconeMenu } from './icones';
 
 // Sélecteur visuel uniquement pour l'instant — ne filtre aucune page (décision produit prise avec
 // l'utilisateur lors de la refonte visuelle). Le branchement réel sur chaque page viendra dans une
@@ -26,7 +26,7 @@ function SelecteurFiliale() {
       value={filialeId}
       onChange={(e) => setFilialeId(e.target.value)}
       title="Filiale (affichage uniquement pour l'instant)"
-      className="rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-700 outline-none transition-colors duration-200 focus:border-primary-500 focus:ring-2 focus:ring-primary-100"
+      className="w-28 max-w-[40vw] rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-700 outline-none transition-colors duration-200 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 sm:w-auto sm:max-w-none sm:px-2.5"
     >
       <option value="">Toutes les filiales</option>
       {filiales.map((f) => (
@@ -87,7 +87,7 @@ function MenuUtilisateur() {
   );
 }
 
-export function BarreSuperieure() {
+export function BarreSuperieure({ onOuvrirMenu }: { onOuvrirMenu: () => void }) {
   const { pathname } = useLocation();
   let pageActive: { groupeTitre: string; libelle: string } | null = null;
   for (const groupe of GROUPES) {
@@ -99,24 +99,36 @@ export function BarreSuperieure() {
   }
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-white px-5 sm:px-8">
-      <nav aria-label="Fil d'Ariane" className="min-w-0 truncate text-sm text-slate-500">
-        <span>Accueil</span>
-        {pageActive && (
-          <>
-            {pageActive.groupeTitre !== 'Accueil' && (
-              <>
-                <span className="mx-1.5 text-slate-300">›</span>
-                <span>{pageActive.groupeTitre}</span>
-              </>
-            )}
-            <span className="mx-1.5 text-slate-300">›</span>
-            <span className="font-medium text-slate-800">{pageActive.libelle}</span>
-          </>
-        )}
-      </nav>
+    <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-white px-3 sm:gap-3 sm:px-8">
+      <div className="flex min-w-0 items-center gap-1">
+        {/* Bouton hamburger — ouvre le tiroir de MiseEnPage, visible uniquement sous md (la
+            sidebar est statique à partir de là, plus besoin de l'ouvrir). */}
+        <button
+          type="button"
+          onClick={onOuvrirMenu}
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors duration-200 hover:bg-slate-100 md:hidden"
+          aria-label="Ouvrir le menu"
+        >
+          <IconeMenu className="h-5 w-5" />
+        </button>
+        <nav aria-label="Fil d'Ariane" className="min-w-0 truncate text-sm text-slate-500">
+          <span>Accueil</span>
+          {pageActive && (
+            <>
+              {pageActive.groupeTitre !== 'Accueil' && (
+                <>
+                  <span className="mx-1.5 text-slate-300">›</span>
+                  <span>{pageActive.groupeTitre}</span>
+                </>
+              )}
+              <span className="mx-1.5 text-slate-300">›</span>
+              <span className="font-medium text-slate-800">{pageActive.libelle}</span>
+            </>
+          )}
+        </nav>
+      </div>
 
-      <div className="flex shrink-0 items-center gap-3">
+      <div className="flex shrink-0 items-center gap-2 sm:gap-3">
         <SelecteurFiliale />
         <MenuUtilisateur />
       </div>

@@ -55,6 +55,19 @@ body {
   @apply bg-slate-50 text-slate-900;
 }
 
+/* Sous 768px (mobile), tous les champs de formulaire passent à 16px — en dessous de ce seuil,
+   Chrome/Safari mobile zooment automatiquement la page au focus d'un champ (demande explicite,
+   audit responsive). Ne touche pas aux classes `text-sm` utilisées ailleurs pour du texte
+   normal (libellés, tableaux...), seulement aux éléments de saisie eux-mêmes — pas la peine de
+   changer `text-sm` partout dans les pages pour ce seul besoin. */
+@media (max-width: 767px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
 @keyframes apparaitre-monter {
   from {
     opacity: 0;

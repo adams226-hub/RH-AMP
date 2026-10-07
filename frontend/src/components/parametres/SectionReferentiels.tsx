@@ -174,8 +174,8 @@ function SectionFiliales() {
             </div>
 
             {coordEnEdition === f.id && (
-              <form onSubmit={enregistrerCoordonnees} className="mt-2 grid grid-cols-2 gap-2 rounded-md bg-slate-50 p-3">
-                <div className="col-span-2">
+              <form onSubmit={enregistrerCoordonnees} className="mt-2 grid grid-cols-1 gap-2 rounded-md bg-slate-50 p-3 sm:grid-cols-2">
+                <div className="sm:col-span-2">
                   <label className="mb-1 block text-xs text-slate-500">
                     Raison sociale complète (ex. "African Mining Partenair (AMP) SA") — utilisée dans les
                     attestations
@@ -187,7 +187,7 @@ function SectionFiliales() {
                     className={`w-full ${CHAMP}`}
                   />
                 </div>
-                <div className="col-span-2">
+                <div className="sm:col-span-2">
                   <label className="mb-1 block text-xs text-slate-500">Adresse</label>
                   <input
                     value={formCoord.adresse}

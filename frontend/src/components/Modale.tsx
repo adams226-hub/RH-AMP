@@ -19,7 +19,7 @@ export function Modale({ titre, onFermer, children }: { titre: string; onFermer:
           <h3 className="text-base font-semibold text-slate-900">{titre}</h3>
           <button
             onClick={onFermer}
-            className="rounded-md p-1 text-slate-400 transition-colors duration-200 hover:bg-slate-100 hover:text-slate-700"
+            className="-m-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-slate-400 transition-colors duration-200 hover:bg-slate-100 hover:text-slate-700"
             aria-label="Fermer"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" className="h-5 w-5">

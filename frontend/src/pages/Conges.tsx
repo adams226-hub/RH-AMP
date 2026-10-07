@@ -24,7 +24,7 @@ import { formaterDateFr } from '../utils/date';
 const CHAMP =
   'rounded-md border border-slate-300 px-2.5 py-1.5 text-sm transition-colors duration-200 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100';
 const BOUTON =
-  'rounded-md bg-primary-700 px-4 py-2 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-800 hover:shadow-md disabled:pointer-events-none disabled:opacity-60';
+  'rounded-md bg-primary-700 px-4 py-3 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-800 hover:shadow-md disabled:pointer-events-none disabled:opacity-60';
 const PAR_PAGE = 10;
 const ROLES_CREATION = ['super_admin', 'drh_holding', 'rh_filiale'];
 
@@ -176,30 +176,32 @@ function VueEmploye({ jeton, employeId }: { jeton: string | null; employeId: str
 
           <div className="mb-6 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             {demandes.length > 0 ? (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
-                    <th className="px-4 py-3">Début</th>
-                    <th className="px-4 py-3">Fin</th>
-                    <th className="px-4 py-3">Jours</th>
-                    <th className="px-4 py-3">Motif</th>
-                    <th className="px-4 py-3">Statut</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {demandes.map((d) => (
-                    <tr key={d.id} className="transition-colors duration-200 hover:bg-slate-50">
-                      <td className="px-4 py-3">{formaterDateFr(d.dateDebut)}</td>
-                      <td className="px-4 py-3">{formaterDateFr(d.dateFin)}</td>
-                      <td className="px-4 py-3">{d.nbJours}</td>
-                      <td className="px-4 py-3 text-slate-500">{d.motif ?? '—'}</td>
-                      <td className="px-4 py-3">
-                        <Badge couleur={COULEURS_STATUT[d.statut]}>{LIBELLES_STATUT[d.statut]}</Badge>
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+                      <th className="px-4 py-3">Début</th>
+                      <th className="px-4 py-3">Fin</th>
+                      <th className="px-4 py-3">Jours</th>
+                      <th className="px-4 py-3">Motif</th>
+                      <th className="px-4 py-3">Statut</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {demandes.map((d) => (
+                      <tr key={d.id} className="transition-colors duration-200 hover:bg-slate-50">
+                        <td className="px-4 py-3">{formaterDateFr(d.dateDebut)}</td>
+                        <td className="px-4 py-3">{formaterDateFr(d.dateFin)}</td>
+                        <td className="px-4 py-3">{d.nbJours}</td>
+                        <td className="px-4 py-3 text-slate-500">{d.motif ?? '—'}</td>
+                        <td className="px-4 py-3">
+                          <Badge couleur={COULEURS_STATUT[d.statut]}>{LIBELLES_STATUT[d.statut]}</Badge>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             ) : (
               <EtatVide icone={<IconeConges />} titre="Aucune demande" message="Vos demandes de congé apparaîtront ici." />
             )}
@@ -268,28 +270,30 @@ function SectionCongesSpeciauxEmploye({ jeton, employeId }: { jeton: string | nu
 
       <div className="mb-6 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         {demandes.length > 0 ? (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
-                <th className="px-4 py-3">Type</th>
-                <th className="px-4 py-3">Début</th>
-                <th className="px-4 py-3">Fin</th>
-                <th className="px-4 py-3">Statut</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {demandes.map((d) => (
-                <tr key={d.id} className="transition-colors duration-200 hover:bg-slate-50">
-                  <td className="px-4 py-3">{LIBELLES_TYPE_SPECIAL[d.type]}</td>
-                  <td className="px-4 py-3">{formaterDateFr(d.dateDebut)}</td>
-                  <td className="px-4 py-3">{formaterDateFr(d.dateFin)}</td>
-                  <td className="px-4 py-3">
-                    <Badge couleur={COULEURS_STATUT_SPECIAL[d.statut]}>{LIBELLES_STATUT_SPECIAL[d.statut]}</Badge>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+                  <th className="px-4 py-3">Type</th>
+                  <th className="px-4 py-3">Début</th>
+                  <th className="px-4 py-3">Fin</th>
+                  <th className="px-4 py-3">Statut</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {demandes.map((d) => (
+                  <tr key={d.id} className="transition-colors duration-200 hover:bg-slate-50">
+                    <td className="px-4 py-3">{LIBELLES_TYPE_SPECIAL[d.type]}</td>
+                    <td className="px-4 py-3">{formaterDateFr(d.dateDebut)}</td>
+                    <td className="px-4 py-3">{formaterDateFr(d.dateFin)}</td>
+                    <td className="px-4 py-3">
+                      <Badge couleur={COULEURS_STATUT_SPECIAL[d.statut]}>{LIBELLES_STATUT_SPECIAL[d.statut]}</Badge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         ) : (
           <EtatVide
             icone={<IconeConges />}
@@ -534,6 +538,7 @@ function VueGestion({ jeton, role }: { jeton: string | null; role: string | null
           </div>
         ) : trie.length > 0 ? (
           <>
+          <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
@@ -602,6 +607,7 @@ function VueGestion({ jeton, role }: { jeton: string | null; role: string | null
                 ))}
               </tbody>
             </table>
+          </div>
             <Pagination page={pageBornee} totalPages={totalPages} onChange={setPage} totalItems={trie.length} parPage={PAR_PAGE} />
           </>
         ) : (
@@ -754,41 +760,43 @@ function SectionCongesSpeciauxGestion({
             ))}
           </div>
         ) : demandes.length > 0 ? (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
-                <th className="px-4 py-3">Employé</th>
-                <th className="px-4 py-3">Type</th>
-                <th className="px-4 py-3">Début</th>
-                <th className="px-4 py-3">Fin</th>
-                <th className="px-4 py-3">Statut</th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {demandes.map((d) => (
-                <tr key={d.id} className="transition-colors duration-200 hover:bg-slate-50">
-                  <td className="px-4 py-3 font-medium text-slate-900">
-                    {d.employeNom} {d.employePrenoms}
-                    <div className="font-mono text-xs font-normal text-slate-400">{d.employeMatricule}</div>
-                  </td>
-                  <td className="px-4 py-3">{LIBELLES_TYPE_SPECIAL[d.type]}</td>
-                  <td className="px-4 py-3">{formaterDateFr(d.dateDebut)}</td>
-                  <td className="px-4 py-3">{formaterDateFr(d.dateFin)}</td>
-                  <td className="px-4 py-3">
-                    <Badge couleur={COULEURS_STATUT_SPECIAL[d.statut]}>{LIBELLES_STATUT_SPECIAL[d.statut]}</Badge>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    {peutDecider && d.statut === 'soumise' && (
-                      <button onClick={() => ouvrirTraitement(d)} className="font-medium text-primary-700 transition-colors duration-200 hover:underline">
-                        Traiter
-                      </button>
-                    )}
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+                  <th className="px-4 py-3">Employé</th>
+                  <th className="px-4 py-3">Type</th>
+                  <th className="px-4 py-3">Début</th>
+                  <th className="px-4 py-3">Fin</th>
+                  <th className="px-4 py-3">Statut</th>
+                  <th className="px-4 py-3" />
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {demandes.map((d) => (
+                  <tr key={d.id} className="transition-colors duration-200 hover:bg-slate-50">
+                    <td className="px-4 py-3 font-medium text-slate-900">
+                      {d.employeNom} {d.employePrenoms}
+                      <div className="font-mono text-xs font-normal text-slate-400">{d.employeMatricule}</div>
+                    </td>
+                    <td className="px-4 py-3">{LIBELLES_TYPE_SPECIAL[d.type]}</td>
+                    <td className="px-4 py-3">{formaterDateFr(d.dateDebut)}</td>
+                    <td className="px-4 py-3">{formaterDateFr(d.dateFin)}</td>
+                    <td className="px-4 py-3">
+                      <Badge couleur={COULEURS_STATUT_SPECIAL[d.statut]}>{LIBELLES_STATUT_SPECIAL[d.statut]}</Badge>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {peutDecider && d.statut === 'soumise' && (
+                        <button onClick={() => ouvrirTraitement(d)} className="font-medium text-primary-700 transition-colors duration-200 hover:underline">
+                          Traiter
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         ) : (
           <EtatVide
             icone={<IconeConges />}
@@ -833,7 +841,7 @@ function SectionCongesSpeciauxGestion({
               <button
                 disabled={traitementEnCours}
                 onClick={() => traiter('rejetee')}
-                className="rounded-md bg-erreur-600 px-4 py-2 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-erreur-700 hover:shadow-md disabled:pointer-events-none disabled:opacity-60"
+                className="rounded-md bg-erreur-600 px-4 py-3 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-erreur-700 hover:shadow-md disabled:pointer-events-none disabled:opacity-60"
               >
                 Rejeter
               </button>

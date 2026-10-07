@@ -28,7 +28,7 @@ import { formaterDateFr } from '../utils/date';
 const CHAMP =
   'rounded-md border border-slate-300 px-2.5 py-1.5 text-sm transition-colors duration-200 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100';
 const BOUTON =
-  'rounded-md bg-primary-700 px-4 py-2 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-800 hover:shadow-md disabled:pointer-events-none disabled:opacity-60';
+  'rounded-md bg-primary-700 px-4 py-3 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-800 hover:shadow-md disabled:pointer-events-none disabled:opacity-60';
 const PAR_PAGE = 10;
 const ROLES_CREATION = ['super_admin', 'drh_holding', 'rh_filiale'];
 
@@ -349,7 +349,7 @@ function VueEmploye({ jeton, employeId }: { jeton: string | null; employeId: str
       {erreur && <div className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{erreur}</div>}
 
       {solde && (
-        <div className="mb-6 grid grid-cols-3 gap-4">
+        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
           <TuileSolde libelle="Pool permissions dispo" valeur={solde.soldeDisponible} />
           <TuileSolde libelle="Quota annuel" valeur={solde.quota} />
           <TuileSolde libelle="Consommé" valeur={solde.joursConsommes} />
@@ -358,25 +358,27 @@ function VueEmploye({ jeton, employeId }: { jeton: string | null; employeId: str
 
       <div className="mb-6 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         {demandes.length > 0 ? (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
-                <th className="px-4 py-3">Type</th>
-                <th className="px-4 py-3">Début</th>
-                <th className="px-4 py-3">Fin</th>
-                <th className="px-4 py-3">Jours</th>
-                <th className="px-4 py-3">Statut</th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {demandes.map((d) => (
-                <tr key={d.id} className="transition-colors duration-200 hover:bg-slate-50">
-                  <LigneDemande d={d} onModifier={() => setDemandeAModifier(d)} />
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+                  <th className="px-4 py-3">Type</th>
+                  <th className="px-4 py-3">Début</th>
+                  <th className="px-4 py-3">Fin</th>
+                  <th className="px-4 py-3">Jours</th>
+                  <th className="px-4 py-3">Statut</th>
+                  <th className="px-4 py-3" />
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {demandes.map((d) => (
+                  <tr key={d.id} className="transition-colors duration-200 hover:bg-slate-50">
+                    <LigneDemande d={d} onModifier={() => setDemandeAModifier(d)} />
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         ) : (
           <EtatVide icone={<IconeAbsences />} titre="Aucune demande" message="Vos permissions et absences apparaîtront ici." />
         )}
@@ -700,6 +702,7 @@ function VueGestion({ jeton, role }: { jeton: string | null; role: string | null
           </div>
         ) : trie.length > 0 ? (
           <>
+          <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
@@ -786,6 +789,7 @@ function VueGestion({ jeton, role }: { jeton: string | null; role: string | null
                 ))}
               </tbody>
             </table>
+          </div>
             <Pagination page={pageBornee} totalPages={totalPages} onChange={setPage} totalItems={trie.length} parPage={PAR_PAGE} />
           </>
         ) : (

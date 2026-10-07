@@ -21,7 +21,7 @@ const CHAMP =
   'w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm transition-colors duration-200 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100';
 const LABEL = 'mb-1 block text-xs font-medium text-slate-600';
 const BOUTON =
-  'rounded-md bg-primary-700 px-4 py-2 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-800 hover:shadow-md disabled:pointer-events-none disabled:opacity-60';
+  'rounded-md bg-primary-700 px-4 py-3 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-800 hover:shadow-md disabled:pointer-events-none disabled:opacity-60';
 const PAR_PAGE = 10;
 const ROLES_GESTION = ['super_admin', 'drh_holding', 'rh_filiale'];
 
@@ -354,6 +354,7 @@ export function Contrats() {
           </div>
         ) : trie.length > 0 ? (
           <>
+          <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
@@ -430,6 +431,7 @@ export function Contrats() {
                 ))}
               </tbody>
             </table>
+          </div>
             <Pagination page={pageBornee} totalPages={totalPages} onChange={setPage} totalItems={trie.length} parPage={PAR_PAGE} />
           </>
         ) : (
@@ -532,7 +534,7 @@ function FormulaireModification({
   return (
     <Modale titre={`Modifier — ${contrat.employeNom} ${contrat.employePrenoms}`} onFermer={onFermer}>
       <form onSubmit={soumettre} className="space-y-3">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label className={LABEL}>Type</label>
             <select value={type} onChange={(e) => setType(e.target.value as TypeContrat)} className={CHAMP}>
@@ -722,7 +724,7 @@ function FormulaireRupture({
           <input value={motifRupture} onChange={(e) => setMotifRupture(e.target.value)} required className={CHAMP + ' w-full'} />
         </div>
         {erreur && <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{erreur}</div>}
-        <button disabled={enCours} className="rounded-md bg-erreur-600 px-4 py-2 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-erreur-700 hover:shadow-md disabled:pointer-events-none disabled:opacity-60">
+        <button disabled={enCours} className="rounded-md bg-erreur-600 px-4 py-3 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-erreur-700 hover:shadow-md disabled:pointer-events-none disabled:opacity-60">
           {enCours ? 'Envoi...' : 'Confirmer la rupture'}
         </button>
       </form>

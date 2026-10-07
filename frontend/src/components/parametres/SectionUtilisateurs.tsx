@@ -18,7 +18,7 @@ import { SelecteurMulti } from '../dashboard/SelecteurMulti';
 const CHAMP =
   'rounded-md border border-slate-300 px-2.5 py-1.5 text-sm transition-colors duration-200 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100';
 const BOUTON =
-  'rounded-md bg-primary-700 px-4 py-2 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-800 hover:shadow-md disabled:pointer-events-none disabled:opacity-60';
+  'rounded-md bg-primary-700 px-4 py-3 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-800 hover:shadow-md disabled:pointer-events-none disabled:opacity-60';
 
 // Liste à cocher toujours visible (pas de menu déroulant en `position: absolute`) — utilisée dans
 // la modale Périmètre, dont le conteneur défilant (Modale.tsx, `overflow-y-auto`) rogne tout menu

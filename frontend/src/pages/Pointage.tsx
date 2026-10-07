@@ -22,7 +22,7 @@ const CHAMP =
   'w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm transition-colors duration-200 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100';
 const LABEL = 'mb-1 block text-xs font-medium text-slate-600';
 const BOUTON =
-  'rounded-md bg-primary-700 px-4 py-2 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-800 hover:shadow-md disabled:pointer-events-none disabled:opacity-60';
+  'rounded-md bg-primary-700 px-4 py-3 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-800 hover:shadow-md disabled:pointer-events-none disabled:opacity-60';
 const ROLES_SAISIE = ['super_admin', 'drh_holding', 'rh_filiale', 'responsable_rh_chantier'];
 const ROLES_VALIDATION = ['super_admin', 'drh_holding', 'rh_filiale'];
 
@@ -754,7 +754,7 @@ export function Pointage() {
             </div>
             <button
               disabled={actionEnCours === ficheARejeter.id}
-              className="rounded-md bg-erreur-600 px-4 py-2 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-erreur-700 hover:shadow-md disabled:opacity-60"
+              className="rounded-md bg-erreur-600 px-4 py-3 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-erreur-700 hover:shadow-md disabled:opacity-60"
             >
               {actionEnCours === ficheARejeter.id ? 'Envoi...' : 'Confirmer le rejet'}
             </button>

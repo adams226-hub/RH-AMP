@@ -406,7 +406,7 @@ export function Employes() {
                 setFormulaireOuvert(true);
               }
             }}
-            className="rounded-md bg-primary-700 px-4 py-2 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-800 hover:shadow-md"
+            className="rounded-md bg-primary-700 px-4 py-3 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-800 hover:shadow-md"
           >
             {formulaireOuvert ? 'Fermer' : '+ Nouvel employé'}
           </button>
@@ -726,7 +726,7 @@ export function Employes() {
 
           <button
             disabled={envoiEnCours}
-            className="mt-4 rounded-md bg-primary-700 px-4 py-2 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-800 hover:shadow-md disabled:pointer-events-none disabled:opacity-60"
+            className="mt-4 rounded-md bg-primary-700 px-4 py-3 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-800 hover:shadow-md disabled:pointer-events-none disabled:opacity-60"
           >
             {envoiEnCours
               ? idEnEdition
@@ -769,6 +769,7 @@ export function Employes() {
           </div>
         ) : trie.length > 0 ? (
           <>
+          <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
@@ -820,6 +821,7 @@ export function Employes() {
                 ))}
               </tbody>
             </table>
+          </div>
             <Pagination page={pageBornee} totalPages={totalPages} onChange={setPage} totalItems={trie.length} parPage={PAR_PAGE} />
           </>
         ) : (
@@ -849,7 +851,7 @@ export function Employes() {
               </button>
             </div>
           )}
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+          <dl className="grid grid-cols-1 gap-x-4 gap-y-3 text-sm sm:grid-cols-2">
             {[
               ['Matricule', employeSelectionne.matricule],
               ['Statut', <BadgeStatut key="s" statut={employeSelectionne.statut} />],
@@ -881,7 +883,7 @@ export function Employes() {
             employeSelectionne.contactUrgenceLien ||
             employeSelectionne.contactUrgenceTel ||
             employeSelectionne.contactUrgenceTel2 ? (
-              <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+              <dl className="grid grid-cols-1 gap-x-4 gap-y-2 text-sm sm:grid-cols-2">
                 <div>
                   <dt className="text-xs text-slate-500">Nom</dt>
                   <dd className="mt-0.5 text-slate-800">{employeSelectionne.contactUrgenceNom ?? '—'}</dd>
@@ -1056,7 +1058,7 @@ export function Employes() {
                   Montants mensuels de référence (F CFA) — proratisés par jours de la fiche Pointage validée du
                   mois / 30, comme pour un salarié sous contrat.
                 </p>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <div>
                     <label className={LABEL}>Salaire de base mensuel</label>
                     <input
@@ -1116,7 +1118,7 @@ export function Employes() {
                 </dt>
                 {resumeRh.enMission && <Badge couleur="accent">En mission</Badge>}
               </div>
-              <div className="grid grid-cols-3 gap-3 text-sm">
+              <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
                 <div>
                   <dt className="text-xs text-slate-500">Absences validées</dt>
                   <dd className="mt-0.5 font-medium text-slate-800">{resumeRh.joursAbsenceValides} j</dd>
