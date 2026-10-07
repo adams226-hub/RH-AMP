@@ -25,6 +25,14 @@ import { routesAttestations } from './modules/attestations/attestations.routes';
 
 export const app = express();
 
+// 1 = fait confiance exactement au 1er saut en amont (le reverse proxy Traefik de Coolify, seul
+// intermédiaire entre le serveur et Internet en production) pour lire le vrai X-Forwarded-For —
+// sans ce réglage, req.ip renvoie l'IP interne du proxy pour tout le monde, ce qui fausse les IP
+// du Journal d'audit et empêche un limiteur de débit par IP de fonctionner correctement (audit
+// sécurité). `1` et non `true` : ne pas faire confiance à des en-têtes au-delà de ce premier saut,
+// pour ne pas réintroduire le risque d'usurpation d'IP que ce réglage est censé éviter.
+app.set('trust proxy', 1);
+
 app.use(cors());
 app.use(express.json());
 
