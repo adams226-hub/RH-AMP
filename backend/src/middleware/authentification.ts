@@ -17,6 +17,6 @@ export function authentification(req: Request, _res: Response, next: NextFunctio
     req.utilisateur = jwt.verify(jeton, env.JWT_SECRET) as PayloadJwt;
     next();
   } catch {
-    throw new ErreurApplicative(401, 'Jeton invalide ou expiré');
+    throw new ErreurApplicative(401, 'Veuillez vous reconnecter');
   }
 }
