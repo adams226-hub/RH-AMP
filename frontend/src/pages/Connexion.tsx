@@ -17,8 +17,8 @@ export function Connexion() {
     setEnCours(true);
 
     try {
-      const { jeton } = await api.connexion(email, motDePasse);
-      connecte(jeton, email);
+      const { jeton, nom, prenoms } = await api.connexion(email, motDePasse);
+      connecte(jeton, email, nom, prenoms);
       navigate('/employes');
     } catch (e) {
       setErreur(e instanceof ErreurApi ? e.message : 'Erreur de connexion au serveur');

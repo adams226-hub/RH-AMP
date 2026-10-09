@@ -116,6 +116,8 @@ export function SectionUtilisateurs() {
 
   const [formulaireOuvert, setFormulaireOuvert] = useState(false);
   const [email, setEmail] = useState('');
+  const [nom, setNom] = useState('');
+  const [prenoms, setPrenoms] = useState('');
   const [role, setRole] = useState<CodeRole | ''>('');
   const [employeId, setEmployeId] = useState('');
   const [filialeIds, setFilialeIds] = useState<string[]>([]);
@@ -154,7 +156,7 @@ export function SectionUtilisateurs() {
       if (filtreRole && u.role !== filtreRole) return false;
       if (filtreStatut && u.statut !== filtreStatut) return false;
       if (terme) {
-        const cible = `${u.email} ${u.employeNom ?? ''} ${u.employePrenoms ?? ''}`.toLowerCase();
+        const cible = `${u.email} ${u.employeNom ?? ''} ${u.employePrenoms ?? ''} ${u.nom ?? ''} ${u.prenoms ?? ''}`.toLowerCase();
         if (!cible.includes(terme)) return false;
       }
       return true;
@@ -174,12 +176,16 @@ export function SectionUtilisateurs() {
       const { utilisateur, motDePasseTemporaire } = await api.creerUtilisateur(jeton, {
         email,
         role,
+        nom: nom.trim() || undefined,
+        prenoms: prenoms.trim() || undefined,
         employeId: employeId || undefined,
         filialeIds: role === 'rh_filiale' ? filialeIds : undefined,
         chantierIds: role === 'responsable_rh_chantier' ? chantierIds : undefined,
       });
       setMotDePasseAffiche({ email: utilisateur.email, motDePasse: motDePasseTemporaire });
       setEmail('');
+      setNom('');
+      setPrenoms('');
       setRole('');
       setEmployeId('');
       setFilialeIds([]);
@@ -293,6 +299,20 @@ export function SectionUtilisateurs() {
             <div className="col-span-2 sm:col-span-1">
               <SelecteurEmploye valeur={employeId} onChange={setEmployeId} />
             </div>
+            <input
+              type="text"
+              value={prenoms}
+              onChange={(e) => setPrenoms(e.target.value)}
+              placeholder="Prénom (si pas de fiche employé liée)"
+              className={CHAMP}
+            />
+            <input
+              type="text"
+              value={nom}
+              onChange={(e) => setNom(e.target.value)}
+              placeholder="Nom (si pas de fiche employé liée)"
+              className={CHAMP}
+            />
           </div>
 
           {role === 'rh_filiale' && (
@@ -368,7 +388,11 @@ export function SectionUtilisateurs() {
                   <tr key={u.id} className="transition-colors duration-200 hover:bg-slate-50">
                     <td className="px-4 py-3 font-medium text-slate-900">{u.email}</td>
                     <td className="px-4 py-3 text-slate-600">
-                      {u.employeNom ? `${u.employeNom} ${u.employePrenoms}` : '—'}
+                      {u.employeNom
+                        ? `${u.employeNom} ${u.employePrenoms}`
+                        : u.nom
+                          ? `${u.prenoms ?? ''} ${u.nom}`.trim()
+                          : '—'}
                     </td>
                     <td className="px-4 py-3">
                       <Badge couleur={COULEURS_ROLE[u.role]}>{LIBELLES_ROLE[u.role]}</Badge>

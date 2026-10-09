@@ -10,6 +10,8 @@ function mapLigne(l: Record<string, unknown>): Utilisateur {
     email: l.email as string,
     role: l.role_code as Utilisateur['role'],
     statut: l.statut as StatutUtilisateur,
+    nom: l.nom as string | null,
+    prenoms: l.prenoms as string | null,
     employeId: l.employe_id as string | null,
     employeNom: l.employe_nom as string | null,
     employePrenoms: l.employe_prenoms as string | null,
@@ -21,7 +23,7 @@ function mapLigne(l: Record<string, unknown>): Utilisateur {
 }
 
 const REQUETE_BASE = `
-  SELECT u.id, u.email, u.statut, u.employe_id, u.derniere_connexion, u.created_at, r.code AS role_code,
+  SELECT u.id, u.email, u.statut, u.nom, u.prenoms, u.employe_id, u.derniere_connexion, u.created_at, r.code AS role_code,
          e.nom AS employe_nom, e.prenoms AS employe_prenoms,
          COALESCE((SELECT array_agg(filiale_id) FROM utilisateurs_filiales WHERE utilisateur_id = u.id), '{}') AS filiale_ids,
          COALESCE((SELECT array_agg(chantier_id) FROM utilisateurs_chantiers WHERE utilisateur_id = u.id), '{}') AS chantier_ids
@@ -74,8 +76,8 @@ export async function creerUtilisateur(
     await client.query('BEGIN');
 
     const { rows } = await client.query(
-      `INSERT INTO utilisateurs (email, mot_de_passe_hash, role_id, employe_id) VALUES ($1, $2, $3, $4) RETURNING id`,
-      [donnees.email, hash, roleRows[0].id, donnees.employeId ?? null]
+      `INSERT INTO utilisateurs (email, mot_de_passe_hash, role_id, employe_id, nom, prenoms) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+      [donnees.email, hash, roleRows[0].id, donnees.employeId ?? null, donnees.nom ?? null, donnees.prenoms ?? null]
     );
     const utilisateurId = rows[0].id as string;
 

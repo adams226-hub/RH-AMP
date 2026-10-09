@@ -9,6 +9,6 @@ const schemaConnexion = z.object({
 
 export async function connexion(req: Request, res: Response) {
   const { email, motDePasse } = schemaConnexion.parse(req.body);
-  const { jeton } = await connecter(email, motDePasse, req.ip);
-  res.json({ jeton });
+  const { jeton, nom, prenoms } = await connecter(email, motDePasse, req.ip);
+  res.json({ jeton, nom, prenoms });
 }

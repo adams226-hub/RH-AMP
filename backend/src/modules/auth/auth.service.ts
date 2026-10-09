@@ -12,17 +12,23 @@ interface LigneUtilisateur {
   role_code: PayloadJwt['role'];
   employe_id: string | null;
   statut: 'actif' | 'suspendu' | 'supprime';
+  nom: string | null;
+  prenoms: string | null;
 }
 
 export async function connecter(
   email: string,
   motDePasse: string,
   adresseIp?: string
-): Promise<{ jeton: string }> {
+): Promise<{ jeton: string; nom: string | null; prenoms: string | null }> {
+  // COALESCE : le nom saisi directement sur le compte prime (cas d'un compte admin sans fiche
+  // employé, ex. un accès réservé à l'administration) ; à défaut, celui de la fiche employé liée.
   const { rows } = await pool.query<LigneUtilisateur>(
-    `SELECT u.id, u.email, u.mot_de_passe_hash, u.employe_id, u.statut, r.code AS role_code
+    `SELECT u.id, u.email, u.mot_de_passe_hash, u.employe_id, u.statut, r.code AS role_code,
+            COALESCE(u.nom, e.nom) AS nom, COALESCE(u.prenoms, e.prenoms) AS prenoms
      FROM utilisateurs u
      JOIN roles r ON r.id = u.role_id
+     LEFT JOIN employes e ON e.id = u.employe_id
      WHERE u.email = $1`,
     [email]
   );
@@ -60,7 +66,7 @@ export async function connecter(
 
   const jeton = jwt.sign(payload, env.JWT_SECRET, { expiresIn: env.JWT_EXPIRES_IN } as jwt.SignOptions);
 
-  return { jeton };
+  return { jeton, nom: utilisateur.nom, prenoms: utilisateur.prenoms };
 }
 
 // Le middleware générique journalAudit ne couvre pas /connexion (non authentifiée à ce stade) —

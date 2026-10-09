@@ -17,6 +17,8 @@ const ROLES = ['super_admin', 'drh_holding', 'rh_filiale', 'chef_service', 'empl
 const schemaCreation = z.object({
   email: z.string().email(),
   role: z.enum(ROLES),
+  nom: z.string().trim().min(1).optional(),
+  prenoms: z.string().trim().min(1).optional(),
   employeId: z.string().uuid().optional(),
   filialeIds: z.array(z.string().uuid()).optional(),
   chantierIds: z.array(z.string().uuid()).optional(),

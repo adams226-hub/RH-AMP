@@ -127,7 +127,7 @@ function construireParametresAudit(params: {
 
 export const api = {
   connexion: (email: string, motDePasse: string) =>
-    requete<{ jeton: string }>('/api/auth/connexion', {
+    requete<{ jeton: string; nom: string | null; prenoms: string | null }>('/api/auth/connexion', {
       method: 'POST',
       body: JSON.stringify({ email, motDePasse }),
     }),

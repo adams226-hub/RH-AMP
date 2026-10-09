@@ -13,16 +13,22 @@ interface ContexteAuth {
   role: CodeRole | null;
   employeId: string | null;
   email: string | null;
-  connecte: (jeton: string, email: string) => void;
+  nom: string | null;
+  prenoms: string | null;
+  connecte: (jeton: string, email: string, nom: string | null, prenoms: string | null) => void;
   deconnecter: () => void;
 }
 
 const ContexteAuthentification = createContext<ContexteAuth | undefined>(undefined);
 
 const CLE_STOCKAGE = 'sirh_jeton';
-// Le JWT ne porte que l'id utilisateur et le rôle (pas d'email/nom) — mémorisé à part au login
-// pour l'afficher dans la barre supérieure, sans appel backend supplémentaire.
+// Le JWT ne porte que l'id utilisateur et le rôle (pas d'email/nom) — mémorisés à part au login
+// pour l'affichage dans la barre supérieure, sans appel backend supplémentaire. Comme pour l'email,
+// un changement de nom après coup ne se reflète qu'à la prochaine connexion (limitation acceptée,
+// cohérente avec le fonctionnement déjà en place).
 const CLE_STOCKAGE_EMAIL = 'sirh_email';
+const CLE_STOCKAGE_NOM = 'sirh_nom';
+const CLE_STOCKAGE_PRENOMS = 'sirh_prenoms';
 
 function decoderPayload(jeton: string): PayloadJwt | null {
   try {
@@ -36,6 +42,8 @@ function decoderPayload(jeton: string): PayloadJwt | null {
 export function FournisseurAuth({ children }: { children: ReactNode }) {
   const [jeton, setJeton] = useState<string | null>(() => localStorage.getItem(CLE_STOCKAGE));
   const [email, setEmail] = useState<string | null>(() => localStorage.getItem(CLE_STOCKAGE_EMAIL));
+  const [nom, setNom] = useState<string | null>(() => localStorage.getItem(CLE_STOCKAGE_NOM));
+  const [prenoms, setPrenoms] = useState<string | null>(() => localStorage.getItem(CLE_STOCKAGE_PRENOMS));
 
   useEffect(() => {
     if (jeton) {
@@ -53,6 +61,22 @@ export function FournisseurAuth({ children }: { children: ReactNode }) {
     }
   }, [email]);
 
+  useEffect(() => {
+    if (nom) {
+      localStorage.setItem(CLE_STOCKAGE_NOM, nom);
+    } else {
+      localStorage.removeItem(CLE_STOCKAGE_NOM);
+    }
+  }, [nom]);
+
+  useEffect(() => {
+    if (prenoms) {
+      localStorage.setItem(CLE_STOCKAGE_PRENOMS, prenoms);
+    } else {
+      localStorage.removeItem(CLE_STOCKAGE_PRENOMS);
+    }
+  }, [prenoms]);
+
   const payload = useMemo(() => (jeton ? decoderPayload(jeton) : null), [jeton]);
 
   return (
@@ -62,13 +86,19 @@ export function FournisseurAuth({ children }: { children: ReactNode }) {
         role: payload?.role ?? null,
         employeId: payload?.employeId ?? null,
         email,
-        connecte: (nouveauJeton, nouvelEmail) => {
+        nom,
+        prenoms,
+        connecte: (nouveauJeton, nouvelEmail, nouveauNom, nouveauxPrenoms) => {
           setJeton(nouveauJeton);
           setEmail(nouvelEmail);
+          setNom(nouveauNom);
+          setPrenoms(nouveauxPrenoms);
         },
         deconnecter: () => {
           setJeton(null);
           setEmail(null);
+          setNom(null);
+          setPrenoms(null);
         },
       }}
     >

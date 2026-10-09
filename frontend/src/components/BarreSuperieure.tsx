@@ -1,10 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { api } from '../api/client';
-import { useAuth } from '../context/AuthContext';
+import { CodeRole, useAuth } from '../context/AuthContext';
 import { Filiale } from '../types/postes';
 import { GROUPES } from '../nav';
 import { IconeChevronBas, IconeDeconnexion, IconeMenu } from './icones';
+
+// Libellés affichés sous le nom dans la barre supérieure — distincts des libellés de l'écran
+// d'administration des comptes (ex. "Super Admin" y reste inchangé) : ici on vise un intitulé
+// plus parlant pour l'utilisateur lui-même, pas un terme technique interne.
+const LIBELLES_ROLE_AFFICHAGE: Record<CodeRole, string> = {
+  super_admin: 'Administrateur',
+  drh_holding: 'DRH Holding',
+  rh_filiale: 'RH Filiale',
+  chef_service: 'Chef de service',
+  employe: 'Employé',
+  responsable_rh_chantier: 'Responsable RH Chantier',
+};
 
 // Sélecteur visuel uniquement pour l'instant — ne filtre aucune page (décision produit prise avec
 // l'utilisateur lors de la refonte visuelle). Le branchement réel sur chaque page viendra dans une
@@ -39,7 +51,7 @@ function SelecteurFiliale() {
 }
 
 function MenuUtilisateur() {
-  const { email, role, deconnecter } = useAuth();
+  const { email, nom, prenoms, role, deconnecter } = useAuth();
   const [ouvert, setOuvert] = useState(false);
   const conteneurRef = useRef<HTMLDivElement>(null);
 
@@ -53,6 +65,13 @@ function MenuUtilisateur() {
     return () => document.removeEventListener('mousedown', surClicExterieur);
   }, []);
 
+  const nomComplet = prenoms && nom ? `${prenoms} ${nom}` : null;
+  const libelleAffiche = nomComplet ?? email ?? 'Utilisateur';
+  const initiales = nomComplet
+    ? `${prenoms!.charAt(0)}${nom!.charAt(0)}`.toUpperCase()
+    : (email ?? '?').charAt(0).toUpperCase();
+  const libelleRole = role ? LIBELLES_ROLE_AFFICHAGE[role] : null;
+
   return (
     <div ref={conteneurRef} className="relative">
       <button
@@ -61,17 +80,18 @@ function MenuUtilisateur() {
         className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-slate-700 transition-colors duration-200 hover:bg-slate-100"
       >
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary-100 text-xs font-semibold text-primary-700">
-          {(email ?? '?').charAt(0).toUpperCase()}
+          {initiales}
         </span>
-        <span className="hidden max-w-[160px] truncate sm:inline">{email ?? 'Utilisateur'}</span>
+        <span className="hidden max-w-[160px] truncate sm:inline">{libelleAffiche}</span>
         <IconeChevronBas className="h-4 w-4 shrink-0 text-slate-400" />
       </button>
 
       {ouvert && (
         <div className="absolute right-0 z-20 mt-1 w-56 rounded-md border border-slate-200 bg-white py-1 shadow-lg">
           <div className="border-b border-slate-100 px-3 py-2">
-            <p className="truncate text-sm font-medium text-slate-800">{email ?? 'Utilisateur'}</p>
-            {role && <p className="text-xs text-slate-400">{role}</p>}
+            <p className="truncate text-sm font-medium text-slate-800">{libelleAffiche}</p>
+            {libelleRole && <p className="text-xs text-slate-400">{libelleRole}</p>}
+            {nomComplet && email && <p className="mt-0.5 truncate text-xs text-slate-400">{email}</p>}
           </div>
           <button
             type="button"

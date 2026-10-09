@@ -7,6 +7,8 @@ export interface Utilisateur {
   email: string;
   role: CodeRole;
   statut: StatutUtilisateur;
+  nom: string | null;
+  prenoms: string | null;
   employeId: string | null;
   employeNom: string | null;
   employePrenoms: string | null;
@@ -19,6 +21,8 @@ export interface Utilisateur {
 export interface CreationUtilisateur {
   email: string;
   role: CodeRole;
+  nom?: string;
+  prenoms?: string;
   employeId?: string;
   filialeIds?: string[];
   chantierIds?: string[];
