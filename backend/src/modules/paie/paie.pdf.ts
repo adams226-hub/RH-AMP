@@ -350,11 +350,18 @@ export async function genererBulletinPdf(id: string): Promise<Buffer> {
     { libelle: 'Retenue 1 %', taux: '1 %', retenue: d.fsp },
   ];
 
+  let indexLigne = 0;
   for (const ligne of lignes) {
     if (ligne === null) {
       y += 5;
       continue;
     }
+    // Fond gris clair une ligne sur deux (zebra striping) — facilite la lecture d'une ligne sur un
+    // tableau dense, du premier poste de rémunération jusqu'à la dernière retenue avant le TOTAL.
+    if (indexLigne % 2 === 1) {
+      doc.rect(xGauche, y - 1.5, largeurTotale, 14.5).fillColor('#f2f2f2').fill();
+    }
+    indexLigne += 1;
     doc.font(ligne.gras ? 'Helvetica-Bold' : ligne.indent ? 'Helvetica-Oblique' : 'Helvetica').fontSize(10.5);
     doc.fillColor('#000').text(ligne.libelle, colLibelle + (ligne.indent ? 12 : 4), y, { width: largeurLibelle - (ligne.indent ? 16 : 8) });
     if (ligne.base !== undefined) {
