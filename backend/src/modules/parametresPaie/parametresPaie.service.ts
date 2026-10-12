@@ -13,6 +13,8 @@ const CLES_CONNUES = [
   'taux_abattement_cadre',
   'taux_abattement_non_cadre',
   'taux_panier_jour',
+  'tarif_nuitee_cadre',
+  'tarif_nuitee_cadre_superieur',
 ] as const;
 
 // Un paramètre est append-only en base (historisé par date_effet) — on ne renvoie ici que la
@@ -35,6 +37,16 @@ export async function listerParametresPaie(): Promise<ParametrePaie[]> {
     valeur: parCle.get(cle)?.valeur ?? NaN,
     dateEffet: parCle.get(cle)?.dateEffet ?? '',
   }));
+}
+
+// Lecture d'une seule valeur courante — utilisé par le module Missions pour figer le tarif de
+// nuitée au moment de la création d'un séjour en maison d'hôte (cf. missions.service.ts).
+export async function obtenirValeurParametre(cle: string): Promise<number | null> {
+  const { rows } = await pool.query(
+    `SELECT valeur FROM parametres_paie WHERE cle = $1 ORDER BY date_effet DESC LIMIT 1`,
+    [cle]
+  );
+  return rows[0] ? Number(rows[0].valeur) : null;
 }
 
 export async function definirParametrePaie(cle: string, valeur: number): Promise<ParametrePaie> {

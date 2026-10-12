@@ -12,8 +12,14 @@ import { Pagination } from '../components/Pagination';
 import { SelecteurEmploye } from '../components/SelecteurEmploye';
 import { useAuth } from '../context/AuthContext';
 import { useTri } from '../hooks/useTri';
-import { MissionAvecEmploye, StatutMission } from '../types/missions';
-import { formaterDateFr } from '../utils/date';
+import {
+  CategorieTarifHebergement,
+  MaisonHote,
+  MissionAvecEmploye,
+  SejourMaisonHoteAvecDetails,
+  StatutMission,
+} from '../types/missions';
+import { formaterDateFr, formaterMoisFr } from '../utils/date';
 
 const CHAMP =
   'rounded-md border border-slate-300 px-2.5 py-1.5 text-sm transition-colors duration-200 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100';
@@ -45,9 +51,13 @@ function TuileCompteur({ libelle, valeur, couleur }: { libelle: string; valeur: 
   );
 }
 
+type Onglet = 'missions' | 'hebergements';
+
 export function Missions() {
   const { jeton, role } = useAuth();
   const peutGerer = role !== null && ROLES_GESTION.includes(role);
+
+  const [onglet, setOnglet] = useState<Onglet>('missions');
 
   const [missions, setMissions] = useState<MissionAvecEmploye[]>([]);
   const [erreur, setErreur] = useState<string | null>(null);
@@ -70,6 +80,28 @@ export function Missions() {
   const [envoiEnCours, setEnvoiEnCours] = useState(false);
   const [exportEnCours, setExportEnCours] = useState(false);
 
+  // Bloc Hébergement (maison d'hôte) — optionnel, rattaché à la mission en cours de création.
+  const [maisonsHote, setMaisonsHote] = useState<MaisonHote[]>([]);
+  const [tarifsNuitee, setTarifsNuitee] = useState<{ cadre: number | null; cadre_superieur: number | null }>({
+    cadre: null,
+    cadre_superieur: null,
+  });
+  const [logeMaisonHote, setLogeMaisonHote] = useState(false);
+  const [maisonHoteId, setMaisonHoteId] = useState('');
+  const [dateArriveeHote, setDateArriveeHote] = useState('');
+  const [dateDepartHote, setDateDepartHote] = useState('');
+  const [nouvelleDateFin, setNouvelleDateFin] = useState('');
+  const [motifProlongation, setMotifProlongation] = useState('');
+  const [centreImputation, setCentreImputation] = useState('');
+  const [categorieTarif, setCategorieTarif] = useState<CategorieTarifHebergement>('cadre');
+
+  // Onglet Hébergements — liste + filtres + export.
+  const [hebergements, setHebergements] = useState<SejourMaisonHoteAvecDetails[]>([]);
+  const [chargementHebergements, setChargementHebergements] = useState(true);
+  const [filtreMoisHebergement, setFiltreMoisHebergement] = useState(() => new Date().toISOString().slice(0, 7));
+  const [filtreMaisonHebergement, setFiltreMaisonHebergement] = useState('');
+  const [exportHebergementEnCours, setExportHebergementEnCours] = useState(false);
+
   const [missionRetour, setMissionRetour] = useState<MissionAvecEmploye | null>(null);
   const [dateRetourReelle, setDateRetourReelle] = useState('');
   const [fraisHebergement, setFraisHebergement] = useState('0');
@@ -86,6 +118,33 @@ export function Missions() {
   }
 
   useEffect(rafraichir, [jeton]);
+
+  useEffect(() => {
+    if (!jeton) return;
+    api.listerMaisonsHote(jeton).then(setMaisonsHote);
+    api.obtenirTarifsNuitee(jeton).then(setTarifsNuitee);
+  }, [jeton]);
+
+  // Préremplit les dates du séjour avec celles de la mission à la coche — reste modifiable ensuite
+  // (décision produit, cf. spécification). Ne réécrase pas une saisie déjà faite par la suite.
+  useEffect(() => {
+    if (logeMaisonHote) {
+      setDateArriveeHote((v) => v || dateDepart);
+      setDateDepartHote((v) => v || dateRetourPrevue);
+    }
+  }, [logeMaisonHote, dateDepart, dateRetourPrevue]);
+
+  function rafraichirHebergements() {
+    if (!jeton) return;
+    setChargementHebergements(true);
+    api
+      .listerHebergements(jeton, { mois: filtreMoisHebergement || undefined, maisonId: filtreMaisonHebergement || undefined })
+      .then(setHebergements)
+      .catch((e) => setErreur(e instanceof ErreurApi ? e.message : 'Erreur de chargement'))
+      .finally(() => setChargementHebergements(false));
+  }
+
+  useEffect(rafraichirHebergements, [jeton, filtreMoisHebergement, filtreMaisonHebergement]);
 
   const compteurs = useMemo(
     () => ({
@@ -118,6 +177,7 @@ export function Missions() {
   async function creer(evenement: FormEvent) {
     evenement.preventDefault();
     if (!jeton || !employeId || !numeroOrdreMission || !destination || !motif || !dateDepart || !dateRetourPrevue) return;
+    if (logeMaisonHote && (!maisonHoteId || !dateArriveeHote || !dateDepartHote)) return;
     setEnvoiEnCours(true);
     setErreur(null);
     try {
@@ -130,6 +190,17 @@ export function Missions() {
         dateRetourPrevue,
         montantHebergement: Number(montantHebergement),
         montantRestauration: Number(montantRestauration),
+        hebergement: logeMaisonHote
+          ? {
+              maisonId: maisonHoteId,
+              dateArrivee: dateArriveeHote,
+              dateDepart: dateDepartHote,
+              nouvelleDateFin: nouvelleDateFin || undefined,
+              motifProlongation: motifProlongation || undefined,
+              centreImputation: centreImputation || undefined,
+              categorieTarif,
+            }
+          : undefined,
       });
       setEmployeId('');
       setNumeroOrdreMission('');
@@ -139,8 +210,17 @@ export function Missions() {
       setDateRetourPrevue('');
       setMontantHebergement('0');
       setMontantRestauration('0');
+      setLogeMaisonHote(false);
+      setMaisonHoteId('');
+      setDateArriveeHote('');
+      setDateDepartHote('');
+      setNouvelleDateFin('');
+      setMotifProlongation('');
+      setCentreImputation('');
+      setCategorieTarif('cadre');
       setFormulaireOuvert(false);
       rafraichir();
+      rafraichirHebergements();
     } catch (e) {
       setErreur(e instanceof ErreurApi ? e.message : 'Erreur lors de la création');
     } finally {
@@ -164,6 +244,28 @@ export function Missions() {
       setErreur(e instanceof ErreurApi ? e.message : "Erreur lors de l'export Excel");
     } finally {
       setExportEnCours(false);
+    }
+  }
+
+  async function telechargerExcelHebergements() {
+    if (!jeton) return;
+    setExportHebergementEnCours(true);
+    setErreur(null);
+    try {
+      const blob = await api.exporterHebergementsExcel(jeton, {
+        mois: filtreMoisHebergement || undefined,
+        maisonId: filtreMaisonHebergement || undefined,
+      });
+      const url = URL.createObjectURL(blob);
+      const lien = document.createElement('a');
+      lien.href = url;
+      lien.download = `hebergements-${filtreMoisHebergement || 'tout'}.xlsx`;
+      lien.click();
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (e) {
+      setErreur(e instanceof ErreurApi ? e.message : "Erreur lors de l'export Excel");
+    } finally {
+      setExportHebergementEnCours(false);
     }
   }
 
@@ -195,24 +297,44 @@ export function Missions() {
           <p className="text-sm text-slate-500">Suivi des départs et retours — statut déduit automatiquement des dates</p>
         </div>
         <div className="flex gap-2">
-          <button type="button" disabled={exportEnCours} onClick={telechargerExcel} className={BOUTON}>
-            {exportEnCours ? 'Génération...' : 'Télécharger en Excel'}
-          </button>
-          {peutGerer && (
-            <button onClick={() => setFormulaireOuvert((v) => !v)} className={BOUTON}>
-              {formulaireOuvert ? 'Fermer' : '+ Nouvelle mission'}
-            </button>
+          {onglet === 'missions' && (
+            <>
+              <button type="button" disabled={exportEnCours} onClick={telechargerExcel} className={BOUTON}>
+                {exportEnCours ? 'Génération...' : 'Télécharger en Excel'}
+              </button>
+              {peutGerer && (
+                <button onClick={() => setFormulaireOuvert((v) => !v)} className={BOUTON}>
+                  {formulaireOuvert ? 'Fermer' : '+ Nouvelle mission'}
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>
 
+      <div className="mb-6 flex gap-1 border-b border-slate-200">
+        {(['missions', 'hebergements'] as const).map((o) => (
+          <button
+            key={o}
+            onClick={() => setOnglet(o)}
+            className={`border-b-2 px-4 py-2.5 text-sm font-medium transition-colors duration-200 ${
+              onglet === o ? 'border-primary-600 text-primary-700' : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            {o === 'missions' ? 'Missions' : 'Hébergements'}
+          </button>
+        ))}
+      </div>
+
+      {erreur && <div className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{erreur}</div>}
+
+      {onglet === 'missions' && (
+      <>
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <TuileCompteur libelle="En mission actuellement" valeur={compteurs.en_cours} couleur="text-primary-700" />
         <TuileCompteur libelle="En retard de retour" valeur={compteurs.en_retard} couleur="text-erreur-600" />
         <TuileCompteur libelle="À venir" valeur={compteurs.a_venir} couleur="text-slate-700" />
       </div>
-
-      {erreur && <div className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{erreur}</div>}
 
       {formulaireOuvert && peutGerer && (
         <form onSubmit={creer} className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -265,7 +387,97 @@ export function Missions() {
               />
             </div>
           </div>
-          <button disabled={envoiEnCours} className={`${BOUTON} mt-3`}>
+
+          <div className="mt-4 border-t border-slate-100 pt-4">
+            <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+              <input
+                type="checkbox"
+                checked={logeMaisonHote}
+                onChange={(e) => setLogeMaisonHote(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+              />
+              Logé en maison d'hôte
+            </label>
+
+            {logeMaisonHote && (
+              <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <select
+                  value={maisonHoteId}
+                  onChange={(e) => setMaisonHoteId(e.target.value)}
+                  required
+                  className={CHAMP}
+                >
+                  <option value="">Maison…</option>
+                  {maisonsHote.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.nom}
+                      {m.ville ? ` — ${m.ville}` : ''}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={categorieTarif}
+                  onChange={(e) => setCategorieTarif(e.target.value as CategorieTarifHebergement)}
+                  className={CHAMP}
+                >
+                  <option value="cadre">
+                    Cadre{tarifsNuitee.cadre !== null ? ` (${tarifsNuitee.cadre.toLocaleString('fr-FR')} F/nuit)` : ''}
+                  </option>
+                  <option value="cadre_superieur">
+                    Cadre Supérieur
+                    {tarifsNuitee.cadre_superieur !== null
+                      ? ` (${tarifsNuitee.cadre_superieur.toLocaleString('fr-FR')} F/nuit)`
+                      : ''}
+                  </option>
+                </select>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-600">Date d'arrivée</label>
+                  <input
+                    type="date"
+                    value={dateArriveeHote}
+                    onChange={(e) => setDateArriveeHote(e.target.value)}
+                    required
+                    className={`w-full ${CHAMP}`}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-600">Date de départ</label>
+                  <input
+                    type="date"
+                    value={dateDepartHote}
+                    onChange={(e) => setDateDepartHote(e.target.value)}
+                    required
+                    className={`w-full ${CHAMP}`}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-600">
+                    Nouvelle date de fin <span className="font-normal text-slate-400">(prolongation, optionnel)</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={nouvelleDateFin}
+                    onChange={(e) => setNouvelleDateFin(e.target.value)}
+                    className={`w-full ${CHAMP}`}
+                  />
+                </div>
+                <input
+                  value={motifProlongation}
+                  onChange={(e) => setMotifProlongation(e.target.value)}
+                  placeholder="Motif de prolongation (optionnel)"
+                  className={`sm:col-span-2 ${CHAMP}`}
+                />
+                <input
+                  value={centreImputation}
+                  onChange={(e) => setCentreImputation(e.target.value)}
+                  placeholder="Centre d'imputation"
+                  className={`sm:col-span-2 ${CHAMP}`}
+                />
+              </div>
+            )}
+          </div>
+
+          <button disabled={envoiEnCours} className={`${BOUTON} mt-4`}>
             {envoiEnCours ? 'Envoi...' : 'Enregistrer le départ'}
           </button>
         </form>
@@ -419,6 +631,109 @@ export function Missions() {
             </button>
           </form>
         </Modale>
+      )}
+      </>
+      )}
+
+      {onglet === 'hebergements' && (
+        <>
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <input
+              type="month"
+              value={filtreMoisHebergement}
+              onChange={(e) => setFiltreMoisHebergement(e.target.value)}
+              className={CHAMP}
+            />
+            <FiltreSelect
+              valeur={filtreMaisonHebergement}
+              onChange={setFiltreMaisonHebergement}
+              toutLibelle="Toutes les maisons"
+              options={maisonsHote.map((m) => ({ valeur: m.id, libelle: m.nom }))}
+            />
+            <button
+              type="button"
+              disabled={exportHebergementEnCours}
+              onClick={telechargerExcelHebergements}
+              className={`${BOUTON} ml-auto`}
+            >
+              {exportHebergementEnCours ? 'Génération...' : 'Télécharger en Excel'}
+            </button>
+          </div>
+
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            {chargementHebergements ? (
+              <div className="space-y-3 p-4">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="h-8 animate-pulse rounded bg-slate-100" />
+                ))}
+              </div>
+            ) : hebergements.length > 0 ? (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+                        <th className="px-4 py-3">Employé</th>
+                        <th className="px-4 py-3">Poste</th>
+                        <th className="px-4 py-3">Mission</th>
+                        <th className="px-4 py-3">Maison</th>
+                        <th className="px-4 py-3">Arrivée</th>
+                        <th className="px-4 py-3">Départ</th>
+                        <th className="px-4 py-3">Nuitées</th>
+                        <th className="px-4 py-3">Prolongation</th>
+                        <th className="px-4 py-3">Forfait total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {hebergements.map((s) => (
+                        <tr key={s.id} className="transition-colors duration-200 hover:bg-slate-50">
+                          <td className="px-4 py-3 font-medium text-slate-900">
+                            {s.employeNom} {s.employePrenoms}
+                            <div className="text-xs font-normal text-slate-400">{s.employeTelephone}</div>
+                          </td>
+                          <td className="px-4 py-3 text-slate-600">
+                            {s.employeFonction ?? '—'}
+                            <div className="text-xs text-slate-400">{s.employeCategorie ?? ''}</div>
+                          </td>
+                          <td className="px-4 py-3 text-slate-600">
+                            {s.motifMission}
+                            {s.numeroOrdreMission && (
+                              <div className="font-mono text-xs text-slate-400">N° {s.numeroOrdreMission}</div>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-slate-600">{s.maisonNom}</td>
+                          <td className="px-4 py-3">{formaterDateFr(s.dateArrivee)}</td>
+                          <td className="px-4 py-3">{formaterDateFr(s.dateDepart)}</td>
+                          <td className="px-4 py-3">{s.nuitees}</td>
+                          <td className="px-4 py-3">{s.nuiteesProlongation > 0 ? s.nuiteesProlongation : '—'}</td>
+                          <td className="px-4 py-3 font-medium text-slate-900">
+                            {s.forfaitTotal.toLocaleString('fr-FR')} F
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t border-slate-200 bg-slate-50 font-semibold text-slate-800">
+                        <td className="px-4 py-3" colSpan={8}>
+                          Total {filtreMoisHebergement ? formaterMoisFr(filtreMoisHebergement) : 'de la période'}
+                        </td>
+                        <td className="px-4 py-3">
+                          {hebergements.reduce((s, h) => s + h.forfaitTotal, 0).toLocaleString('fr-FR')} F
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </>
+            ) : (
+              <EtatVide
+                icone={<IconeMissions />}
+                titre="Aucun hébergement"
+                message="Aucun séjour en maison d'hôte enregistré pour ce mois/cette maison."
+              />
+            )}
+          </div>
+        </>
       )}
     </MiseEnPage>
   );

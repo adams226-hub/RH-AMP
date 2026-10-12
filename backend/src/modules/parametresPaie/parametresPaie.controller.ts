@@ -9,6 +9,8 @@ const CLES = [
   'taux_abattement_cadre',
   'taux_abattement_non_cadre',
   'taux_panier_jour',
+  'tarif_nuitee_cadre',
+  'tarif_nuitee_cadre_superieur',
 ] as const;
 
 // taux_panier_jour est un montant en F CFA (pas un taux entre 0 et 1, contrairement aux autres

@@ -4,6 +4,7 @@ import { Badge } from '../Badge';
 import { ChampRecherche } from '../ChampRecherche';
 import { useAuth } from '../../context/AuthContext';
 import { CategorieProfessionnelle } from '../../types/categoriesProfessionnelles';
+import { MaisonHote } from '../../types/missions';
 import { Chantier } from '../../types/pointage';
 import { Departement, Filiale, Fonction, ServiceOrg } from '../../types/postes';
 
@@ -992,6 +993,165 @@ function SectionChantiers() {
   );
 }
 
+// --- Maisons d'hôte (module Missions > Hébergements) --------------------------------------
+
+function SectionMaisonsHote() {
+  const { jeton, role } = useAuth();
+  const peutGerer = role === 'super_admin' || role === 'drh_holding' || role === 'rh_filiale';
+  const peutArchiver = role === 'super_admin';
+
+  const [maisons, setMaisons] = useState<MaisonHote[]>([]);
+  const [filiales, setFiliales] = useState<Filiale[]>([]);
+  const [erreur, setErreur] = useState<string | null>(null);
+  const [nom, setNom] = useState('');
+  const [ville, setVille] = useState('');
+  const [filialeId, setFilialeId] = useState('');
+  const [edition, setEdition] = useState<{ id: string; nom: string; ville: string } | null>(null);
+
+  function rafraichir() {
+    if (!jeton) return;
+    api.listerMaisonsHote(jeton, true).then(setMaisons);
+  }
+
+  useEffect(rafraichir, [jeton]);
+
+  useEffect(() => {
+    if (!jeton) return;
+    api.listerFiliales(jeton, true).then(setFiliales);
+  }, [jeton]);
+
+  const nomFiliale = (id: string) => filiales.find((f) => f.id === id)?.nom ?? id;
+
+  async function creer(evenement: FormEvent) {
+    evenement.preventDefault();
+    if (!jeton || !nom || !filialeId) return;
+    try {
+      await api.creerMaisonHote(jeton, { filialeId, nom, ville: ville || undefined });
+      setNom('');
+      setVille('');
+      rafraichir();
+    } catch (e) {
+      setErreur(e instanceof ErreurApi ? e.message : 'Erreur lors de la création');
+    }
+  }
+
+  async function valider() {
+    if (!jeton || !edition) return;
+    try {
+      await api.modifierMaisonHote(jeton, edition.id, { nom: edition.nom, ville: edition.ville || undefined });
+      setEdition(null);
+      rafraichir();
+    } catch (e) {
+      setErreur(e instanceof ErreurApi ? e.message : 'Erreur lors de la modification');
+    }
+  }
+
+  async function basculer(m: MaisonHote) {
+    if (!jeton) return;
+    try {
+      await api.archiverMaisonHote(jeton, m.id, !m.actif);
+      rafraichir();
+    } catch (e) {
+      setErreur(e instanceof ErreurApi ? e.message : 'Erreur lors du changement de statut');
+    }
+  }
+
+  async function supprimer(m: MaisonHote) {
+    if (!jeton) return;
+    if (!window.confirm(`Supprimer définitivement la maison « ${m.nom} » ? Cette action est irréversible.`)) return;
+    try {
+      await api.supprimerMaisonHote(jeton, m.id);
+      rafraichir();
+    } catch (e) {
+      setErreur(e instanceof ErreurApi ? e.message : 'Erreur lors de la suppression');
+    }
+  }
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <h3 className="mb-1 text-sm font-semibold text-slate-800">Maisons d'hôte</h3>
+      <p className="mb-3 text-xs text-slate-400">
+        Utilisées par le bloc Hébergement des missions et l'onglet Hébergements (Missions).
+      </p>
+      {erreur && <div className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{erreur}</div>}
+      <ul className="mb-3 max-h-64 space-y-1.5 overflow-y-auto text-sm text-slate-700">
+        {maisons.map((m) => (
+          <li key={m.id} className="flex items-center justify-between gap-2">
+            {edition?.id === m.id ? (
+              <div className="flex flex-1 flex-wrap gap-1.5">
+                <input
+                  value={edition.nom}
+                  onChange={(e) => setEdition({ ...edition, nom: e.target.value })}
+                  placeholder="Nom"
+                  className={`flex-1 ${CHAMP}`}
+                  autoFocus
+                />
+                <input
+                  value={edition.ville}
+                  onChange={(e) => setEdition({ ...edition, ville: e.target.value })}
+                  placeholder="Ville"
+                  className={`w-24 ${CHAMP}`}
+                />
+                <button onClick={valider} className={LIEN}>
+                  OK
+                </button>
+                <button onClick={() => setEdition(null)} className="text-xs text-slate-400 hover:text-slate-600">
+                  Annuler
+                </button>
+              </div>
+            ) : (
+              <>
+                <span className={m.actif ? '' : 'text-slate-400'}>
+                  {m.nom}
+                  {m.ville && <span className="text-slate-400"> — {m.ville}</span>}
+                  <span className="text-slate-400"> ({nomFiliale(m.filialeId)})</span>
+                </span>
+                <span className="flex shrink-0 items-center gap-2">
+                  <BadgeActif actif={m.actif} />
+                  {peutGerer && (
+                    <button
+                      onClick={() => setEdition({ id: m.id, nom: m.nom, ville: m.ville ?? '' })}
+                      className={LIEN}
+                    >
+                      Modifier
+                    </button>
+                  )}
+                  {peutArchiver && (
+                    <button onClick={() => basculer(m)} className="text-xs text-slate-500 hover:underline">
+                      {m.actif ? 'Archiver' : 'Réactiver'}
+                    </button>
+                  )}
+                  {peutArchiver && (
+                    <button onClick={() => supprimer(m)} className="text-xs text-red-600 hover:underline">
+                      Supprimer
+                    </button>
+                  )}
+                </span>
+              </>
+            )}
+          </li>
+        ))}
+        {maisons.length === 0 && <li className="text-slate-400">Aucune maison d'hôte.</li>}
+      </ul>
+      {peutGerer && (
+        <form onSubmit={creer} className="flex flex-wrap gap-2">
+          <select value={filialeId} onChange={(e) => setFilialeId(e.target.value)} required className={CHAMP}>
+            <option value="">Filiale…</option>
+            {filiales.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.nom}
+              </option>
+            ))}
+          </select>
+          <input value={nom} onChange={(e) => setNom(e.target.value)} placeholder="Nom" className={`flex-1 ${CHAMP}`} />
+          <input value={ville} onChange={(e) => setVille(e.target.value)} placeholder="Ville" className={`w-24 ${CHAMP}`} />
+          <button className={BOUTON}>Ajouter</button>
+        </form>
+      )}
+    </div>
+  );
+}
+
 export function SectionReferentiels() {
   return (
     <div>
@@ -1006,6 +1166,7 @@ export function SectionReferentiels() {
         <SectionCategories />
         <SectionFonctions />
         <SectionChantiers />
+        <SectionMaisonsHote />
       </div>
     </div>
   );

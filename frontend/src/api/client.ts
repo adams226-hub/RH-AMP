@@ -16,7 +16,13 @@ import {
   SoldePermissionExceptionnelle,
   TypeDemandeAbsence,
 } from '../types/absences';
-import { Mission, MissionAvecEmploye } from '../types/missions';
+import {
+  CreationSejourMaisonHote,
+  MaisonHote,
+  Mission,
+  MissionAvecEmploye,
+  SejourMaisonHoteAvecDetails,
+} from '../types/missions';
 import { ElementVariable, TypeElementSaisissable } from '../types/elementsVariables';
 import { Contrat, ContratAvecEmploye } from '../types/contrats';
 import { Employe, ResumeRhEmploye, TauxJournalier } from '../types/employe';
@@ -440,6 +446,7 @@ export const api = {
       dateRetourPrevue: string;
       montantHebergement?: number;
       montantRestauration?: number;
+      hebergement?: CreationSejourMaisonHote;
     }
   ) => requete<Mission>('/api/missions', { method: 'POST', body: JSON.stringify(donnees) }, jeton),
   enregistrerRetourMission: (jeton: string, id: string, dateRetourReelle: string) =>
@@ -450,6 +457,41 @@ export const api = {
     donnees: { montantHebergement: number; montantRestauration: number }
   ) => requete<Mission>(`/api/missions/${id}/frais`, { method: 'PATCH', body: JSON.stringify(donnees) }, jeton),
   exporterMissionsExcel: (jeton: string) => requeteBlob('/api/missions/export-excel', jeton),
+
+  obtenirTarifsNuitee: (jeton: string) =>
+    requete<{ cadre: number | null; cadre_superieur: number | null }>('/api/missions/tarifs-nuitee', {}, jeton),
+
+  // Maisons d'hôte
+  listerMaisonsHote: (jeton: string, inclureArchives = false) =>
+    requete<MaisonHote[]>(`/api/missions/maisons-hote${inclureArchives ? '?tout=1' : ''}`, {}, jeton),
+  creerMaisonHote: (jeton: string, donnees: { filialeId: string; nom: string; ville?: string }) =>
+    requete<MaisonHote>('/api/missions/maisons-hote', { method: 'POST', body: JSON.stringify(donnees) }, jeton),
+  modifierMaisonHote: (jeton: string, id: string, donnees: { nom: string; ville?: string }) =>
+    requete<MaisonHote>(`/api/missions/maisons-hote/${id}`, { method: 'PATCH', body: JSON.stringify(donnees) }, jeton),
+  archiverMaisonHote: (jeton: string, id: string, actif: boolean) =>
+    requete<MaisonHote>(
+      `/api/missions/maisons-hote/${id}/statut`,
+      { method: 'PATCH', body: JSON.stringify({ actif }) },
+      jeton
+    ),
+  supprimerMaisonHote: (jeton: string, id: string) =>
+    requete<void>(`/api/missions/maisons-hote/${id}`, { method: 'DELETE' }, jeton),
+
+  // Onglet Hébergements
+  listerHebergements: (jeton: string, filtres: { mois?: string; maisonId?: string } = {}) => {
+    const query = new URLSearchParams();
+    if (filtres.mois) query.set('mois', filtres.mois);
+    if (filtres.maisonId) query.set('maisonId', filtres.maisonId);
+    const suffixe = query.toString() ? `?${query.toString()}` : '';
+    return requete<SejourMaisonHoteAvecDetails[]>(`/api/missions/hebergements${suffixe}`, {}, jeton);
+  },
+  exporterHebergementsExcel: (jeton: string, filtres: { mois?: string; maisonId?: string } = {}) => {
+    const query = new URLSearchParams();
+    if (filtres.mois) query.set('mois', filtres.mois);
+    if (filtres.maisonId) query.set('maisonId', filtres.maisonId);
+    const suffixe = query.toString() ? `?${query.toString()}` : '';
+    return requeteBlob(`/api/missions/hebergements/export-excel${suffixe}`, jeton);
+  },
 
   // Pointage
   listerChantiers: (jeton: string, inclureArchives = false) =>

@@ -15,6 +15,8 @@ const LIBELLES: Record<string, string> = {
   taux_abattement_cadre: 'Taux abattement — Cadre',
   taux_abattement_non_cadre: 'Taux abattement — Autre catégorie',
   taux_panier_jour: 'Prime de panier / jour',
+  tarif_nuitee_cadre: 'Tarif nuitée maison d’hôte — Cadre',
+  tarif_nuitee_cadre_superieur: 'Tarif nuitée maison d’hôte — Cadre Supérieur',
 };
 
 const NOTES: Record<string, string> = {
@@ -24,11 +26,13 @@ const NOTES: Record<string, string> = {
   taux_abattement_cadre: 'Abattement forfaitaire pour frais professionnels des employés de catégorie Cadre.',
   taux_abattement_non_cadre: 'Abattement forfaitaire pour frais professionnels des employés hors catégorie Cadre.',
   taux_panier_jour: 'Montant en F CFA par jour de panier pointé (pointage validé).',
+  tarif_nuitee_cadre: 'Appliqué quand « Cadre » est choisi sur le séjour (module Missions > Hébergements).',
+  tarif_nuitee_cadre_superieur: 'Appliqué quand « Cadre Supérieur » est choisi sur le séjour (module Missions > Hébergements).',
 };
 
-// taux_panier_jour est un montant en F CFA, pas un taux — les autres clés restent des
-// pourcentages (valeur stockée entre 0 et 1, affichée ×100 avec un signe %).
-const UNITES_MONTANT = new Set(['taux_panier_jour']);
+// taux_panier_jour et les tarifs de nuitée sont des montants en F CFA, pas des taux — les autres
+// clés restent des pourcentages (valeur stockée entre 0 et 1, affichée ×100 avec un signe %).
+const UNITES_MONTANT = new Set(['taux_panier_jour', 'tarif_nuitee_cadre', 'tarif_nuitee_cadre_superieur']);
 
 export function SectionParametresPaie() {
   const { jeton, role } = useAuth();
