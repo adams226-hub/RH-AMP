@@ -101,19 +101,16 @@ const COULEURS_STATUT: Record<Utilisateur['statut'], CouleurBadge> = {
   supprime: 'slate',
 };
 
+// Rôles proposés dans les listes : Super Admin + rôles gestionnaires. Les anciens rôles (DRH Holding,
+// RH Filiale, Chef de service, Employé, Responsable RH Chantier) ne sont plus attribuables mais
+// restent connus du code, pour réactivation éventuelle.
+const ROLES_PROPOSES: CodeRole[] = ['super_admin', ...ROLES_GESTIONNAIRES];
+
 // Reflète exactement la règle backend (rolesAssignablesPar) — jamais un rôle "supérieur" au sien.
 const ROLES_ASSIGNABLES: Record<CodeRole, CodeRole[]> = {
-  super_admin: [
-    'super_admin',
-    'drh_holding',
-    'rh_filiale',
-    'chef_service',
-    'employe',
-    'responsable_rh_chantier',
-    ...ROLES_GESTIONNAIRES,
-  ],
-  drh_holding: ['rh_filiale', 'chef_service', 'employe', 'responsable_rh_chantier', ...ROLES_GESTIONNAIRES],
-  rh_filiale: ['chef_service', 'employe', 'responsable_rh_chantier'],
+  super_admin: ROLES_PROPOSES,
+  drh_holding: ROLES_GESTIONNAIRES,
+  rh_filiale: [],
   chef_service: [],
   employe: [],
   responsable_rh_chantier: [],
@@ -377,7 +374,7 @@ export function SectionUtilisateurs() {
           valeur={filtreRole}
           onChange={setFiltreRole}
           toutLibelle="Tous les rôles"
-          options={Object.entries(LIBELLES_ROLE).map(([valeur, libelle]) => ({ valeur, libelle }))}
+          options={ROLES_PROPOSES.map((valeur) => ({ valeur, libelle: LIBELLES_ROLE[valeur] }))}
         />
         <FiltreSelect
           valeur={filtreStatut}

@@ -46,14 +46,12 @@ const schemaPerimetre = z.object({
 // Un rôle ne peut jamais attribuer un rôle "supérieur" ou égal au sien (sauf Super Admin, qui
 // peut tout) — cf. specs Utilisateurs §3 : RH Filiale attribue employe/chef_service/responsable
 // chantier ; DRH Holding attribue jusqu'à rh_filiale ; Super Admin attribue tout, y compris
-// super_admin/drh_holding. Les rôles gestionnaires voient toutes les filiales : RH Filiale (limité à
-// ses filiales) ne peut donc pas les attribuer.
+// super_admin/drh_holding. Seuls Super Admin et les rôles gestionnaires sont encore attribuables :
+// les anciens rôles restent dans ROLES (comptes existants, réactivation éventuelle) mais ne peuvent
+// plus être donnés à un compte.
 function rolesAssignablesPar(role: CodeRole): CodeRole[] {
-  if (role === 'super_admin') return [...ROLES];
-  if (role === 'drh_holding') {
-    return ['rh_filiale', 'chef_service', 'employe', 'responsable_rh_chantier', ...ROLES_GESTIONNAIRES];
-  }
-  if (role === 'rh_filiale') return ['chef_service', 'employe', 'responsable_rh_chantier'];
+  if (role === 'super_admin') return ['super_admin', ...ROLES_GESTIONNAIRES];
+  if (role === 'drh_holding') return [...ROLES_GESTIONNAIRES];
   return [];
 }
 
