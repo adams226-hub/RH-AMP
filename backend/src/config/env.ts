@@ -8,7 +8,7 @@ const schemaEnv = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   DATABASE_URL: z.string().min(1, 'DATABASE_URL est requis (connexion PostgreSQL Supabase)'),
   JWT_SECRET: z.string().min(16, 'JWT_SECRET doit faire au moins 16 caractères'),
-  JWT_EXPIRES_IN: z.string().default('8h'),
+  JWT_EXPIRES_IN: z.string().default('2d'),
   SUPABASE_URL: z.string().url().optional(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
   // Délai artificiel (ms) ajouté à chaque requête API — outil de dev pour tester les écrans de

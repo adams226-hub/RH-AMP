@@ -216,12 +216,14 @@ export function Pointage() {
           heures: j.heures !== '' ? Number(j.heures) : undefined,
           codeAbsence: j.codeAbsence !== '' ? j.codeAbsence : undefined,
         }));
+      const employe = roster.find((r) => r.employeId === employeId);
       await api.enregistrerFichePointage(jeton, {
         employeId,
         chantierId,
         periodeDebut,
         periodeFin,
         jours: joursSaisis,
+        libelleEmploye: employe ? `${employe.nom} ${employe.prenoms}` : undefined,
       });
       chargerFicheExistante();
       rafraichirRoster();

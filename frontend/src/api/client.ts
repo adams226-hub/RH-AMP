@@ -43,6 +43,7 @@ import { CyclePaie, ResumeCyclePaie } from '../types/cyclesPaie';
 import { CategorieProfessionnelle } from '../types/categoriesProfessionnelles';
 import { Attestation, AttestationAvecEmploye, DonneesAttestation, Stagiaire, TypeAttestation } from '../types/attestations';
 import { CodeRole } from '../context/AuthContext';
+import { mettreEnFile, operationAvecCle } from '../fileEnvoi';
 
 const URL_API = import.meta.env.VITE_API_URL;
 
@@ -64,8 +65,41 @@ export class ErreurApi extends Error {
   }
 }
 
+// Statut 0 = aucune réponse du serveur (pas de réseau) — distinct de toute erreur HTTP.
+export const MESSAGE_HORS_CONNEXION =
+  "Pas de connexion internet : cette action sera possible dès le retour du réseau.";
+
+// Heure de la dernière lecture réussie avec le réseau — affichée par le bandeau hors connexion
+// pour dater les données servies depuis le cache du service worker.
+export const CLE_DERNIERE_SYNCHRO = 'rh_amp_derniere_synchro';
+
+function noterSynchro() {
+  if (!navigator.onLine) return; // réponse probablement servie par le cache : ne date rien
+  try {
+    localStorage.setItem(CLE_DERNIERE_SYNCHRO, new Date().toISOString());
+  } catch {
+    // stockage indisponible (navigation privée) : le bandeau affichera simplement « hors connexion »
+  }
+}
+
+// Les lectures (GET) partent même hors connexion : le service worker répond alors avec la dernière
+// version en cache. Les écritures, elles, sont refusées tout de suite avec un message clair plutôt
+// qu'une erreur réseau obscure.
+async function appelReseau(url: string, init: RequestInit): Promise<Response> {
+  const lecture = !init.method || init.method === 'GET';
+  if (!lecture && !navigator.onLine) throw new ErreurApi(0, MESSAGE_HORS_CONNEXION);
+  try {
+    return await fetch(url, init);
+  } catch {
+    throw new ErreurApi(
+      0,
+      navigator.onLine ? 'Le serveur ne répond pas. Vérifiez la connexion puis réessayez.' : MESSAGE_HORS_CONNEXION
+    );
+  }
+}
+
 async function requete<T>(chemin: string, options: RequestInit = {}, jeton?: string | null): Promise<T> {
-  const reponse = await fetch(`${URL_API}${chemin}`, {
+  const reponse = await appelReseau(`${URL_API}${chemin}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
@@ -79,12 +113,76 @@ async function requete<T>(chemin: string, options: RequestInit = {}, jeton?: str
     throw new ErreurApi(reponse.status, corps.erreur ?? 'Erreur inconnue');
   }
 
+  if (!options.method || options.method === 'GET') noterSynchro();
   if (reponse.status === 204) return undefined as T;
   return reponse.json();
 }
 
+// Écritures possibles hors connexion : sans réseau (ou si le serveur est injoignable), la saisie
+// part dans la file d'envoi (fileEnvoi.ts) au lieu d'échouer, et l'appel se termine comme un succès
+// — les écrans concernés n'utilisent pas la réponse du serveur. Les erreurs HTTP (validation,
+// doublon...) restent remontées normalement quand le réseau est là.
+async function requeteOuFile<T>(
+  chemin: string,
+  options: RequestInit & { method: 'POST' | 'PUT' | 'PATCH' },
+  jeton: string,
+  enFile: { libelle: string; cle?: string }
+): Promise<T> {
+  if (navigator.onLine) {
+    try {
+      return await requete<T>(chemin, options, jeton);
+    } catch (e) {
+      if (!(e instanceof ErreurApi && e.statut === 0)) throw e;
+    }
+  }
+  mettreEnFile({ chemin, methode: options.method, corps: options.body as string | undefined, ...enFile });
+  return undefined as T;
+}
+
+interface SaisieFichePointage {
+  employeId: string;
+  chantierId: string;
+  periodeDebut: string;
+  periodeFin: string;
+  jours?: { date: string; heures?: number; codeAbsence?: CodeAbsencePointage }[];
+}
+
+type FichePointageAvecJours = PointageMensuel & {
+  jours: { date: string; heures: number | null; codeAbsence: CodeAbsencePointage | null }[];
+};
+
+// Base d'une fiche saisie hors connexion sans version serveur connue : les compteurs sont recalculés
+// par le serveur à l'envoi, l'id n'existe qu'après (la soumission exige donc le réseau).
+const FICHE_POINTAGE_VIDE: FichePointageAvecJours = {
+  id: '',
+  employeId: '',
+  chantierId: '',
+  periodeDebut: '',
+  periodeFin: '',
+  moisPaie: '',
+  heuresHs15: 0,
+  heuresHs35: 0,
+  heuresHs60: 0,
+  joursPanier: 0,
+  nbJoursAbsenceInjustifiee: 0,
+  nbJoursReposMedical: 0,
+  nbJoursPermissionNonPayee: 0,
+  nbJoursPermissionPayee: 0,
+  nbJoursCongeAnnuel: 0,
+  statut: 'brouillon',
+  commentaireRejet: null,
+  jours: [],
+};
+
+// Une seule fiche par employé et par mois : une nouvelle saisie hors connexion remplace la précédente.
+const cleFichePointage = (employeId: string, date: string) => `pointage:${employeId}:${date.slice(0, 7)}`;
+
+const dateCourte = (iso: string) => iso.slice(8, 10) + '/' + iso.slice(5, 7);
+const moisLisible = (iso: string) =>
+  new Date(iso.slice(0, 7) + '-01T00:00:00').toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+
 async function requeteFichier<T>(chemin: string, corps: FormData, jeton: string): Promise<T> {
-  const reponse = await fetch(`${URL_API}${chemin}`, {
+  const reponse = await appelReseau(`${URL_API}${chemin}`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${jeton}` },
     body: corps,
@@ -99,7 +197,9 @@ async function requeteFichier<T>(chemin: string, corps: FormData, jeton: string)
 }
 
 async function requeteBlob(chemin: string, jeton: string): Promise<Blob> {
-  const reponse = await fetch(`${URL_API}${chemin}`, {
+  // PDF et exports sont fabriqués par le serveur et jamais mis en cache : réseau obligatoire.
+  if (!navigator.onLine) throw new ErreurApi(0, MESSAGE_HORS_CONNEXION);
+  const reponse = await appelReseau(`${URL_API}${chemin}`, {
     headers: { Authorization: `Bearer ${jeton}` },
   });
 
@@ -140,9 +240,34 @@ export const api = {
 
   // Employés
   listerEmployes: (jeton: string) => requete<Employe[]>('/api/employes', {}, jeton),
-  rechercherEmployes: (jeton: string, recherche: string, limite = 20) =>
-    requete<Employe[]>(`/api/employes?recherche=${encodeURIComponent(recherche)}&limite=${limite}`, {}, jeton),
-  obtenirEmploye: (jeton: string, id: string) => requete<Employe>(`/api/employes/${id}`, {}, jeton),
+  // Hors connexion, une recherche jamais faite n'est pas en cache : on cherche alors dans la liste
+  // complète des employés gardée sur l'appareil (préchargée à l'ouverture, cf. prechargerHorsConnexion).
+  rechercherEmployes: async (jeton: string, recherche: string, limite = 20) => {
+    if (navigator.onLine) {
+      try {
+        return await requete<Employe[]>(
+          `/api/employes?recherche=${encodeURIComponent(recherche)}&limite=${limite}`,
+          {},
+          jeton
+        );
+      } catch (e) {
+        if (!(e instanceof ErreurApi && e.statut === 0)) throw e;
+      }
+    }
+    const texte = recherche.toLowerCase();
+    const tous = await requete<Employe[]>('/api/employes', {}, jeton);
+    return tous.filter((e) => `${e.matricule} ${e.nom} ${e.prenoms}`.toLowerCase().includes(texte)).slice(0, limite);
+  },
+  obtenirEmploye: async (jeton: string, id: string) => {
+    try {
+      return await requete<Employe>(`/api/employes/${id}`, {}, jeton);
+    } catch (e) {
+      if (!(e instanceof ErreurApi && e.statut === 0)) throw e;
+      const employe = (await requete<Employe[]>('/api/employes', {}, jeton)).find((x) => x.id === id);
+      if (!employe) throw e;
+      return employe;
+    }
+  },
   obtenirResumeRhEmploye: (jeton: string, id: string) =>
     requete<ResumeRhEmploye>(`/api/employes/${id}/resume-rh`, {}, jeton),
   creerEmploye: (
@@ -176,7 +301,10 @@ export const api = {
       contactUrgenceTel2?: string;
       maladieParticuliere?: string;
     }
-  ) => requete<Employe>('/api/employes', { method: 'POST', body: JSON.stringify(donnees) }, jeton),
+  ) =>
+    requeteOuFile<Employe>('/api/employes', { method: 'POST', body: JSON.stringify(donnees) }, jeton, {
+      libelle: `Nouvel employé — ${donnees.nom} ${donnees.prenoms}`,
+    }),
   modifierEmploye: (
     jeton: string,
     id: string,
@@ -209,7 +337,11 @@ export const api = {
       contactUrgenceTel2: string;
       maladieParticuliere: string;
     }>
-  ) => requete<Employe>(`/api/employes/${id}`, { method: 'PATCH', body: JSON.stringify(donnees) }, jeton),
+  ) =>
+    requeteOuFile<Employe>(`/api/employes/${id}`, { method: 'PATCH', body: JSON.stringify(donnees) }, jeton, {
+      libelle: `Modification de la fiche — ${donnees.nom ?? ''} ${donnees.prenoms ?? ''}`.trim(),
+      cle: `employe:${id}`,
+    }),
   changerStatutEmploye: (jeton: string, id: string, statut: Employe['statut'], dateSortie?: string, motifSortie?: string) =>
     requete<Employe>(
       `/api/employes/${id}/statut`,
@@ -341,7 +473,10 @@ export const api = {
   creerDemandeConge: (
     jeton: string,
     donnees: { employeId: string; dateDebut: string; dateFin: string; motif?: string }
-  ) => requete<DemandeConge>('/api/conges/demandes', { method: 'POST', body: JSON.stringify(donnees) }, jeton),
+  ) =>
+    requeteOuFile<DemandeConge>('/api/conges/demandes', { method: 'POST', body: JSON.stringify(donnees) }, jeton, {
+      libelle: `Demande de congé du ${dateCourte(donnees.dateDebut)} au ${dateCourte(donnees.dateFin)}`,
+    }),
   donnerAvisConge: (jeton: string, id: string, avis: 'favorable' | 'defavorable') =>
     requete<DemandeConge>(`/api/conges/demandes/${id}/avis`, { method: 'POST', body: JSON.stringify({ avis }) }, jeton),
   deciderConge: (jeton: string, id: string, decision: 'validee' | 'rejetee') =>
@@ -363,7 +498,13 @@ export const api = {
       justificatifFourni?: boolean;
       motif?: string;
     }
-  ) => requete<DemandeCongeSpecial>('/api/conges-speciaux/demandes', { method: 'POST', body: JSON.stringify(donnees) }, jeton),
+  ) =>
+    requeteOuFile<DemandeCongeSpecial>(
+      '/api/conges-speciaux/demandes',
+      { method: 'POST', body: JSON.stringify(donnees) },
+      jeton,
+      { libelle: `Demande de congé spécial à partir du ${dateCourte(donnees.dateDebut)}` }
+    ),
   deciderCongeSpecial: (
     jeton: string,
     id: string,
@@ -400,7 +541,10 @@ export const api = {
       dateFin: string;
       justificatifFourni?: boolean;
     }
-  ) => requete<DemandeAbsence>('/api/absences/demandes', { method: 'POST', body: JSON.stringify(donnees) }, jeton),
+  ) =>
+    requeteOuFile<DemandeAbsence>('/api/absences/demandes', { method: 'POST', body: JSON.stringify(donnees) }, jeton, {
+      libelle: `Demande d'absence du ${dateCourte(donnees.dateDebut)} au ${dateCourte(donnees.dateFin)}`,
+    }),
   modifierDemandeAbsence: (
     jeton: string,
     id: string,
@@ -413,11 +557,10 @@ export const api = {
       justificatifFourni?: boolean;
     }
   ) =>
-    requete<DemandeAbsence>(
-      `/api/absences/demandes/${id}`,
-      { method: 'PUT', body: JSON.stringify(donnees) },
-      jeton
-    ),
+    requeteOuFile<DemandeAbsence>(`/api/absences/demandes/${id}`, { method: 'PUT', body: JSON.stringify(donnees) }, jeton, {
+      libelle: 'Modification d\x27une demande d\x27absence',
+      cle: `absence:${id}`,
+    }),
   donnerAvisAbsence: (jeton: string, id: string, avis: 'favorable' | 'defavorable') =>
     requete<DemandeAbsence>(`/api/absences/demandes/${id}/avis`, { method: 'POST', body: JSON.stringify({ avis }) }, jeton),
   deciderAbsence: (
@@ -448,14 +591,24 @@ export const api = {
       montantRestauration?: number;
       hebergement?: CreationSejourMaisonHote;
     }
-  ) => requete<Mission>('/api/missions', { method: 'POST', body: JSON.stringify(donnees) }, jeton),
+  ) =>
+    requeteOuFile<Mission>('/api/missions', { method: 'POST', body: JSON.stringify(donnees) }, jeton, {
+      libelle: `Nouvelle mission — ${donnees.destination} (ordre n° ${donnees.numeroOrdreMission})`,
+    }),
   enregistrerRetourMission: (jeton: string, id: string, dateRetourReelle: string) =>
-    requete<Mission>(`/api/missions/${id}/retour`, { method: 'POST', body: JSON.stringify({ dateRetourReelle }) }, jeton),
+    requeteOuFile<Mission>(`/api/missions/${id}/retour`, { method: 'POST', body: JSON.stringify({ dateRetourReelle }) }, jeton, {
+      libelle: `Retour de mission le ${dateCourte(dateRetourReelle)}`,
+      cle: `mission-retour:${id}`,
+    }),
   modifierFraisMission: (
     jeton: string,
     id: string,
     donnees: { montantHebergement: number; montantRestauration: number }
-  ) => requete<Mission>(`/api/missions/${id}/frais`, { method: 'PATCH', body: JSON.stringify(donnees) }, jeton),
+  ) =>
+    requeteOuFile<Mission>(`/api/missions/${id}/frais`, { method: 'PATCH', body: JSON.stringify(donnees) }, jeton, {
+      libelle: 'Frais de mission',
+      cle: `mission-frais:${id}`,
+    }),
   exporterMissionsExcel: (jeton: string) => requeteBlob('/api/missions/export-excel', jeton),
 
   obtenirTarifsNuitee: (jeton: string) =>
@@ -521,24 +674,42 @@ export const api = {
     if (chantierId) params.set('chantierId', chantierId);
     return requeteBlob(`/api/pointage/fiches/export-excel?${params}`, jeton);
   },
-  obtenirFichePointageEmploye: (jeton: string, employeId: string, moisPaie: string) =>
-    requete<(PointageMensuel & { jours: { date: string; heures: number | null; codeAbsence: CodeAbsencePointage | null }[] }) | null>(
-      `/api/pointage/fiches/employe?employeId=${employeId}&moisPaie=${moisPaie}`,
-      {},
-      jeton
-    ),
+  // Une fiche saisie hors connexion et pas encore envoyée prime sur la version du serveur (ou du
+  // cache) : sinon l'écran rechargerait l'ancienne grille et la saisie semblerait perdue.
+  obtenirFichePointageEmploye: async (jeton: string, employeId: string, moisPaie: string) => {
+    const enAttente = operationAvecCle(cleFichePointage(employeId, moisPaie));
+    let fiche: FichePointageAvecJours | null = null;
+    try {
+      fiche = await requete<FichePointageAvecJours | null>(
+        `/api/pointage/fiches/employe?employeId=${employeId}&moisPaie=${moisPaie}`,
+        {},
+        jeton
+      );
+    } catch (e) {
+      if (!enAttente) throw e;
+    }
+    if (!enAttente?.corps) return fiche;
+
+    const saisie = JSON.parse(enAttente.corps) as SaisieFichePointage;
+    return {
+      ...(fiche ?? FICHE_POINTAGE_VIDE),
+      employeId,
+      chantierId: saisie.chantierId,
+      periodeDebut: saisie.periodeDebut,
+      periodeFin: saisie.periodeFin,
+      moisPaie,
+      statut: 'brouillon' as const,
+      jours: (saisie.jours ?? []).map((j) => ({ date: j.date, heures: j.heures ?? null, codeAbsence: j.codeAbsence ?? null })),
+    };
+  },
   // Heures sup 15/35/60%, jours panier et compteurs d'absence ne se saisissent plus ici — ils
   // sont recalculés automatiquement côté serveur depuis `jours` (grille journalière).
-  enregistrerFichePointage: (
-    jeton: string,
-    donnees: {
-      employeId: string;
-      chantierId: string;
-      periodeDebut: string;
-      periodeFin: string;
-      jours?: { date: string; heures?: number; codeAbsence?: CodeAbsencePointage }[];
-    }
-  ) => requete<PointageMensuel>('/api/pointage/fiches', { method: 'POST', body: JSON.stringify(donnees) }, jeton),
+  // libelleEmploye sert uniquement à nommer la saisie dans la file d'envoi : jamais envoyé au serveur.
+  enregistrerFichePointage: (jeton: string, { libelleEmploye, ...donnees }: SaisieFichePointage & { libelleEmploye?: string }) =>
+    requeteOuFile<PointageMensuel>('/api/pointage/fiches', { method: 'POST', body: JSON.stringify(donnees) }, jeton, {
+      libelle: `Pointage — ${libelleEmploye ?? 'employé'} (${moisLisible(donnees.periodeFin)})`,
+      cle: cleFichePointage(donnees.employeId, donnees.periodeFin),
+    }),
   soumettreFichePointage: (jeton: string, id: string) =>
     requete<PointageMensuel>(`/api/pointage/fiches/${id}/soumettre`, { method: 'POST' }, jeton),
   obtenirAnomaliesPointage: (jeton: string, id: string) =>

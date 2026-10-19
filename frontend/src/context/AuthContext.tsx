@@ -1,4 +1,5 @@
 import { ReactNode, createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { effacerDonneesHorsConnexion } from '../horsConnexion';
 
 export type CodeRole =
   | 'super_admin'
@@ -100,12 +101,16 @@ export function FournisseurAuth({ children }: { children: ReactNode }) {
         nom,
         prenoms,
         connecte: (nouveauJeton, nouvelEmail, nouveauNom, nouveauxPrenoms) => {
+          // Les saisies en attente (fileEnvoi) ne sont pas effacées : chacune n'est montrée et
+          // envoyée que pour le compte qui l'a faite, à sa prochaine connexion.
+          effacerDonneesHorsConnexion();
           setJeton(nouveauJeton);
           setEmail(nouvelEmail);
           setNom(nouveauNom);
           setPrenoms(nouveauxPrenoms);
         },
         deconnecter: () => {
+          effacerDonneesHorsConnexion();
           setJeton(null);
           setEmail(null);
           setNom(null);

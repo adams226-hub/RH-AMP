@@ -2,7 +2,10 @@ import { ReactNode, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { GROUPES, lienVisible } from '../nav';
+import { BandeauHorsConnexion } from './BandeauHorsConnexion';
 import { BarreSuperieure } from './BarreSuperieure';
+import { FileEnvoiHorsConnexion } from './FileEnvoiHorsConnexion';
+import { InvitationInstallation } from './InvitationInstallation';
 import { IconeFermer } from './icones';
 
 export function MiseEnPage({ children }: { children: ReactNode }) {
@@ -85,6 +88,9 @@ export function MiseEnPage({ children }: { children: ReactNode }) {
 
       <div className="flex h-full min-w-0 flex-1 flex-col">
         <BarreSuperieure onOuvrirMenu={() => setMenuMobileOuvert(true)} />
+        <BandeauHorsConnexion />
+        <FileEnvoiHorsConnexion />
+        <InvitationInstallation />
         <main className="flex-1 overflow-y-auto">
           <div className="mx-auto max-w-5xl px-4 py-6 sm:px-8 sm:py-8">{children}</div>
         </main>

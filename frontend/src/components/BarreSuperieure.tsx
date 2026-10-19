@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { api } from '../api/client';
 import { CodeRole, useAuth } from '../context/AuthContext';
 import { Filiale } from '../types/postes';
+import { nbOperationsEnAttenteDe } from '../fileEnvoi';
 import { GROUPES } from '../nav';
 import { IconeChevronBas, IconeDeconnexion, IconeMenu } from './icones';
 
@@ -100,7 +101,20 @@ function MenuUtilisateur() {
           </div>
           <button
             type="button"
-            onClick={deconnecter}
+            onClick={() => {
+              const nb = nbOperationsEnAttenteDe(email);
+              if (
+                nb > 0 &&
+                !window.confirm(
+                  nb > 1
+                    ? `${nb} saisies pas encore envoyées. Elles resteront sur l'appareil et partiront à votre prochaine connexion. Se déconnecter quand même ?`
+                    : "1 saisie pas encore envoyée. Elle restera sur l'appareil et partira à votre prochaine connexion. Se déconnecter quand même ?"
+                )
+              ) {
+                return;
+              }
+              deconnecter();
+            }}
             className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-600 transition-colors duration-200 hover:bg-red-50 hover:text-erreur-600"
           >
             <IconeDeconnexion className="h-4 w-4 shrink-0" />
