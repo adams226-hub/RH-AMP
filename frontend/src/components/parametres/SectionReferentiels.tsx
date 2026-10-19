@@ -1152,9 +1152,10 @@ function SectionMaisonsHote() {
   );
 }
 
-// Départements et Services masqués à la demande de l'utilisateur (non utilisés). Le code et les
-// données restent en place : repasser à true pour les réafficher.
+// Départements, Services et Maisons d'hôte masqués à la demande de l'utilisateur (non utilisés). Le
+// code et les données restent en place : repasser à true pour les réafficher.
 const AFFICHER_DEPARTEMENTS_SERVICES = false;
+const AFFICHER_MAISONS_HOTE = false;
 
 export function SectionReferentiels() {
   return (
@@ -1174,7 +1175,7 @@ export function SectionReferentiels() {
         <SectionCategories />
         <SectionFonctions />
         <SectionChantiers />
-        <SectionMaisonsHote />
+        {AFFICHER_MAISONS_HOTE && <SectionMaisonsHote />}
       </div>
     </div>
   );

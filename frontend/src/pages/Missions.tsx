@@ -53,6 +53,11 @@ function TuileCompteur({ libelle, valeur, couleur }: { libelle: string; valeur: 
 
 type Onglet = 'missions' | 'hebergements';
 
+// Maisons d'hôte masquées à la demande de l'utilisateur (onglet Hébergements et case « Logé en
+// maison d'hôte »). Le code et les données restent en place : repasser à true pour les réafficher.
+// Le montant « Hébergement (F CFA) » de la mission, lui, reste affiché.
+const AFFICHER_MAISONS_HOTE = false;
+
 export function Missions() {
   const { jeton, role } = useAuth();
   const peutGerer = peutGererModule(role, 'missions');
@@ -312,6 +317,7 @@ export function Missions() {
         </div>
       </div>
 
+      {AFFICHER_MAISONS_HOTE && (
       <div className="mb-6 flex gap-1 border-b border-slate-200">
         {(['missions', 'hebergements'] as const).map((o) => (
           <button
@@ -325,6 +331,7 @@ export function Missions() {
           </button>
         ))}
       </div>
+      )}
 
       {erreur && <div className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{erreur}</div>}
 
@@ -388,6 +395,7 @@ export function Missions() {
             </div>
           </div>
 
+          {AFFICHER_MAISONS_HOTE && (
           <div className="mt-4 border-t border-slate-100 pt-4">
             <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
               <input
@@ -476,6 +484,7 @@ export function Missions() {
               </div>
             )}
           </div>
+          )}
 
           <button disabled={envoiEnCours} className={`${BOUTON} mt-4`}>
             {envoiEnCours ? 'Envoi...' : 'Enregistrer le départ'}
