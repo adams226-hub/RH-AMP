@@ -338,7 +338,9 @@ function SectionCongesSpeciauxEmploye({ jeton, employeId }: { jeton: string | nu
 
 function VueGestion({ jeton, role }: { jeton: string | null; role: CodeRole | null }) {
   const [onglet, setOnglet] = useState<'annuel' | 'special'>('annuel');
-  const peutDonnerAvis = role === 'chef_service' || role === 'super_admin';
+  // Avis hiérarchique facultatif : RH (et Super Admin) décident directement ; seul un éventuel Chef de
+  // service donne encore un avis.
+  const peutDonnerAvis = role === 'chef_service';
   const peutDecider = peutGererModule(role, 'conges');
   const peutCreer = peutGererModule(role, 'conges');
 
@@ -373,7 +375,7 @@ function VueGestion({ jeton, role }: { jeton: string | null; role: CodeRole | nu
 
   const estATraiter = (d: DemandeCongeAvecEmploye) =>
     (peutDonnerAvis && d.statut === 'soumise') ||
-    (peutDecider && (d.statut === 'avis_favorable' || d.statut === 'avis_defavorable'));
+    (peutDecider && (d.statut === 'soumise' || d.statut === 'avis_favorable' || d.statut === 'avis_defavorable'));
 
   const filtres = useMemo(() => {
     const terme = recherche.trim().toLowerCase();
@@ -583,7 +585,7 @@ function VueGestion({ jeton, role }: { jeton: string | null; role: CodeRole | nu
                             </button>
                           </>
                         )}
-                        {peutDecider && (d.statut === 'avis_favorable' || d.statut === 'avis_defavorable') && (
+                        {peutDecider && (d.statut === 'soumise' || d.statut === 'avis_favorable' || d.statut === 'avis_defavorable') && (
                           <>
                             <button
                               disabled={enAttenteId === d.id}

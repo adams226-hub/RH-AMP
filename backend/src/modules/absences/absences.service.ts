@@ -386,8 +386,10 @@ export async function traiterDecisionRh(
     ]);
     const demande = demandeRows[0] ? mapDemande(demandeRows[0]) : null;
 
-    if (!demande || !['avis_favorable', 'avis_defavorable'].includes(demande.statut)) {
-      throw new ErreurApplicative(409, "Demande introuvable ou pas encore soumise à l'avis hiérarchique");
+    // Décision directe possible dès la saisie ('soumise') : l'avis hiérarchique est facultatif depuis
+    // la suppression du rôle Chef de service ; une demande déjà avisée reste décidable comme avant.
+    if (!demande || !['soumise', 'avis_favorable', 'avis_defavorable'].includes(demande.statut)) {
+      throw new ErreurApplicative(409, 'Demande introuvable ou déjà traitée');
     }
 
     let classificationRetenue: ClassificationAbsence | null = null;
