@@ -75,7 +75,10 @@ export async function chantiersAutorisesPour(
 
   if (role === 'rh_filiale') {
     if (filialesAutorisees === null) return null;
-    const { rows } = await pool.query('SELECT id FROM chantiers WHERE filiale_id = ANY($1)', [filialesAutorisees]);
+    // Chantiers de ses filiales + chantiers communs (filiale_id NULL), où ses employés peuvent travailler.
+    const { rows } = await pool.query('SELECT id FROM chantiers WHERE filiale_id = ANY($1) OR filiale_id IS NULL', [
+      filialesAutorisees,
+    ]);
     return rows.map((r) => r.id as string);
   }
 

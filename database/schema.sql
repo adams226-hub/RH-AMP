@@ -186,7 +186,7 @@ CREATE UNIQUE INDEX idx_fonctions_intitule_unique ON fonctions (lower(intitule))
 -- rattaché à une filiale, où le pointage est saisi par un Responsable RH Chantier.
 CREATE TABLE chantiers (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    filiale_id      UUID NOT NULL REFERENCES filiales(id) ON DELETE RESTRICT,
+    filiale_id      UUID REFERENCES filiales(id) ON DELETE RESTRICT, -- NULL = chantier commun à toutes les filiales
     nom             TEXT NOT NULL,
     localisation    TEXT,
     responsable_id  UUID, -- Responsable RH Chantier ; FK vers employes ajoutée plus bas
@@ -194,6 +194,8 @@ CREATE TABLE chantiers (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (filiale_id, nom)
 );
+-- UNIQUE (filiale_id, nom) ignore les NULL : pas deux chantiers communs de même nom.
+CREATE UNIQUE INDEX chantiers_nom_commun_unique ON chantiers (lower(nom)) WHERE filiale_id IS NULL;
 
 -- ============================================================================
 -- 2. UTILISATEURS ET RÔLES (module Utilisateurs)

@@ -496,7 +496,7 @@ export const api = {
   // Pointage
   listerChantiers: (jeton: string, inclureArchives = false) =>
     requete<Chantier[]>(`/api/pointage/chantiers${inclureArchives ? '?inclureArchives=true' : ''}`, {}, jeton),
-  creerChantier: (jeton: string, donnees: { filialeId: string; nom: string; localisation?: string }) =>
+  creerChantier: (jeton: string, donnees: { filialeId: string | null; nom: string; localisation?: string }) =>
     requete<Chantier>('/api/pointage/chantiers', { method: 'POST', body: JSON.stringify(donnees) }, jeton),
   renommerChantier: (jeton: string, id: string, nom: string) =>
     requete<Chantier>(`/api/pointage/chantiers/${id}`, { method: 'PATCH', body: JSON.stringify({ nom }) }, jeton),

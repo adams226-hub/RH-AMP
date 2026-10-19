@@ -1,6 +1,6 @@
 export interface Chantier {
   id: string;
-  filialeId: string;
+  filialeId: string | null; // null = chantier commun à toutes les filiales
   nom: string;
   localisation: string | null;
   responsableId: string | null;
@@ -8,7 +8,7 @@ export interface Chantier {
 }
 
 export interface CreationChantier {
-  filialeId: string;
+  filialeId?: string | null;
   nom: string;
   localisation?: string;
   responsableId?: string;

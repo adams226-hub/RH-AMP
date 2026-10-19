@@ -868,13 +868,14 @@ function SectionChantiers() {
     api.listerFiliales(jeton, true).then(setFiliales);
   }, [jeton]);
 
-  const nomFiliale = (id: string) => filiales.find((f) => f.id === id)?.nom ?? id;
+  const nomFiliale = (id: string | null) => (id === null ? 'Toutes filiales' : (filiales.find((f) => f.id === id)?.nom ?? id));
 
   async function creer(evenement: FormEvent) {
     evenement.preventDefault();
-    if (!jeton || !nom || !filialeId) return;
+    if (!jeton || !nom) return;
     try {
-      await api.creerChantier(jeton, { filialeId, nom });
+      // Filiale vide = chantier commun à toutes les filiales.
+      await api.creerChantier(jeton, { filialeId: filialeId || null, nom });
       setNom('');
       rafraichir();
     } catch (e) {
@@ -920,7 +921,8 @@ function SectionChantiers() {
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <h3 className="mb-1 text-sm font-semibold text-slate-800">Lieux d'affectation (chantiers)</h3>
       <p className="mb-3 text-xs text-slate-400">
-        Utilisés par Pointage et comme lieu d'affectation par défaut sur la fiche employé (Journal de Paie).
+        Utilisés par Pointage et comme lieu d'affectation par défaut sur la fiche employé (Journal de Paie). Un
+        chantier commun accueille les employés de toutes les filiales.
       </p>
       {erreur && <div className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{erreur}</div>}
       <ul className="mb-3 max-h-64 space-y-1.5 overflow-y-auto text-sm text-slate-700">
@@ -972,8 +974,8 @@ function SectionChantiers() {
       </ul>
       {peutGerer && (
         <form onSubmit={creer} className="flex flex-wrap gap-2">
-          <select value={filialeId} onChange={(e) => setFilialeId(e.target.value)} required className={CHAMP}>
-            <option value="">Filiale…</option>
+          <select value={filialeId} onChange={(e) => setFilialeId(e.target.value)} className={CHAMP}>
+            <option value="">Toutes les filiales (chantier commun)</option>
             {filiales.map((f) => (
               <option key={f.id} value={f.id}>
                 {f.nom}

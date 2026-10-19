@@ -232,7 +232,7 @@ export function CyclePaie() {
                     <select value={exportChantierId} onChange={(e) => setExportChantierId(e.target.value)} className={CHAMP}>
                       <option value="">Tous les chantiers</option>
                       {chantiers
-                        .filter((c) => c.filialeId === filialeId)
+                        .filter((c) => c.filialeId === filialeId || c.filialeId === null)
                         .map((c) => (
                           <option key={c.id} value={c.id}>
                             {c.nom}
@@ -374,8 +374,12 @@ export function CyclePaie() {
               {filiales
                 .filter((f) => !filtreFiliale || f.id === filtreFiliale)
                 // Un cycle est par filiale, pas par chantier — choisir un chantier restreint donc
-                // la liste à la filiale à laquelle ce chantier est rattaché.
-                .filter((f) => !filtreChantier || chantiers.find((c) => c.id === filtreChantier)?.filialeId === f.id)
+                // la liste à la filiale à laquelle ce chantier est rattaché (toutes s'il est commun).
+                .filter((f) => {
+                  if (!filtreChantier) return true;
+                  const filialeChantier = chantiers.find((c) => c.id === filtreChantier)?.filialeId;
+                  return filialeChantier === null || filialeChantier === f.id;
+                })
                 .map((f) => {
                   const cycle = cycles.find((c) => c.filialeId === f.id);
                   const statut: StatutCyclePaie = cycle?.statut ?? 'ouvert';

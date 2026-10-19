@@ -18,7 +18,7 @@ import {
 function mapChantier(l: Record<string, unknown>): Chantier {
   return {
     id: l.id as string,
-    filialeId: l.filiale_id as string,
+    filialeId: l.filiale_id as string | null,
     nom: l.nom as string,
     localisation: l.localisation as string | null,
     responsableId: l.responsable_id as string | null,
@@ -45,15 +45,32 @@ export async function listerChantiers(
   return rows.map(mapChantier);
 }
 
+// Même nom interdit dans une même filiale, et entre chantiers communs (filiale_id NULL) — l'index
+// unique chantiers_nom_commun_unique le garantit en base ; ce contrôle donne juste un message clair.
+async function verifierNomChantierLibre(nom: string, filialeId: string | null, idExclu: string | null): Promise<void> {
+  const { rows } = await pool.query(
+    `SELECT 1 FROM chantiers
+     WHERE lower(nom) = lower($1) AND filiale_id IS NOT DISTINCT FROM $2 AND ($3::uuid IS NULL OR id <> $3)`,
+    [nom, filialeId, idExclu]
+  );
+  if (rows[0]) throw new ErreurApplicative(409, `Un chantier nommé « ${nom} » existe déjà`);
+}
+
 export async function creerChantier(donnees: CreationChantier): Promise<Chantier> {
+  const filialeId = donnees.filialeId ?? null;
+  await verifierNomChantierLibre(donnees.nom, filialeId, null);
   const { rows } = await pool.query(
     'INSERT INTO chantiers (filiale_id, nom, localisation, responsable_id) VALUES ($1, $2, $3, $4) RETURNING *',
-    [donnees.filialeId, donnees.nom, donnees.localisation ?? null, donnees.responsableId ?? null]
+    [filialeId, donnees.nom, donnees.localisation ?? null, donnees.responsableId ?? null]
   );
   return mapChantier(rows[0]);
 }
 
 export async function renommerChantier(id: string, nom: string): Promise<Chantier> {
+  const { rows: existants } = await pool.query('SELECT filiale_id FROM chantiers WHERE id = $1', [id]);
+  if (!existants[0]) throw new ErreurApplicative(404, 'Chantier introuvable');
+  await verifierNomChantierLibre(nom, existants[0].filiale_id as string | null, id);
+
   const { rows } = await pool.query('UPDATE chantiers SET nom = $2 WHERE id = $1 RETURNING *', [id, nom]);
   if (!rows[0]) throw new ErreurApplicative(404, 'Chantier introuvable');
   return mapChantier(rows[0]);

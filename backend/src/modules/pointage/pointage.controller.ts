@@ -23,7 +23,8 @@ import { genererFichePointagePdf } from './pointage.pdf';
 import { genererExportExcelPointage } from './pointage.excel';
 
 const schemaCreationChantier = z.object({
-  filialeId: z.string().uuid(),
+  // Absente ou null = chantier commun à toutes les filiales.
+  filialeId: z.string().uuid().nullable().optional(),
   nom: z.string().min(1),
   localisation: z.string().optional(),
   responsableId: z.string().uuid().optional(),
