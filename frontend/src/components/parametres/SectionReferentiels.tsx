@@ -1152,6 +1152,10 @@ function SectionMaisonsHote() {
   );
 }
 
+// Départements et Services masqués à la demande de l'utilisateur (non utilisés). Le code et les
+// données restent en place : repasser à true pour les réafficher.
+const AFFICHER_DEPARTEMENTS_SERVICES = false;
+
 export function SectionReferentiels() {
   return (
     <div>
@@ -1161,8 +1165,12 @@ export function SectionReferentiels() {
       </p>
       <div className="grid gap-6 md:grid-cols-2">
         <SectionFiliales />
-        <SectionDepartements />
-        <SectionServices />
+        {AFFICHER_DEPARTEMENTS_SERVICES && (
+          <>
+            <SectionDepartements />
+            <SectionServices />
+          </>
+        )}
         <SectionCategories />
         <SectionFonctions />
         <SectionChantiers />
