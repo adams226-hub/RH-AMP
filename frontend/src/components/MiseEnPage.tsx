@@ -1,7 +1,7 @@
 import { ReactNode, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { GROUPES } from '../nav';
+import { GROUPES, lienVisible } from '../nav';
 import { BarreSuperieure } from './BarreSuperieure';
 import { IconeFermer } from './icones';
 
@@ -10,7 +10,7 @@ export function MiseEnPage({ children }: { children: ReactNode }) {
   const [menuMobileOuvert, setMenuMobileOuvert] = useState(false);
   const groupesVisibles = GROUPES.map((groupe) => ({
     ...groupe,
-    liens: groupe.liens.filter((lien) => !lien.roles || (role && lien.roles.includes(role))),
+    liens: groupe.liens.filter((lien) => lienVisible(lien, role)),
   })).filter((groupe) => groupe.liens.length > 0);
 
   return (

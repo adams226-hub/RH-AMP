@@ -10,6 +10,7 @@ import { Modale } from '../Modale';
 import { SelecteurEmploye } from '../SelecteurEmploye';
 import { useTri } from '../../hooks/useTri';
 import { CodeRole, useAuth } from '../../context/AuthContext';
+import { ROLES_GESTIONNAIRES } from '../../permissions';
 import { Chantier } from '../../types/pointage';
 import { Filiale } from '../../types/postes';
 import { Utilisateur } from '../../types/utilisateurs';
@@ -67,6 +68,11 @@ const LIBELLES_ROLE: Record<CodeRole, string> = {
   chef_service: 'Chef de service',
   employe: 'Employé',
   responsable_rh_chantier: 'Responsable RH Chantier',
+  gestionnaire_conges_absences: 'Gestionnaire Congés & Absences',
+  gestionnaire_contrats_attestations: 'Gestionnaire Contrats & Attestations',
+  gestionnaire_paie: 'Gestionnaire Paie',
+  gestionnaire_temps_presences: 'Gestionnaire Temps & Présences',
+  gestionnaire_personnel_pointage: 'Gestionnaire Personnel & Pointage',
 };
 
 const COULEURS_ROLE: Record<CodeRole, CouleurBadge> = {
@@ -76,6 +82,11 @@ const COULEURS_ROLE: Record<CodeRole, CouleurBadge> = {
   chef_service: 'alerte',
   employe: 'slate',
   responsable_rh_chantier: 'accent',
+  gestionnaire_conges_absences: 'primary',
+  gestionnaire_contrats_attestations: 'primary',
+  gestionnaire_paie: 'primary',
+  gestionnaire_temps_presences: 'primary',
+  gestionnaire_personnel_pointage: 'primary',
 };
 
 const LIBELLES_STATUT: Record<Utilisateur['statut'], string> = {
@@ -92,12 +103,25 @@ const COULEURS_STATUT: Record<Utilisateur['statut'], CouleurBadge> = {
 
 // Reflète exactement la règle backend (rolesAssignablesPar) — jamais un rôle "supérieur" au sien.
 const ROLES_ASSIGNABLES: Record<CodeRole, CodeRole[]> = {
-  super_admin: ['super_admin', 'drh_holding', 'rh_filiale', 'chef_service', 'employe', 'responsable_rh_chantier'],
-  drh_holding: ['rh_filiale', 'chef_service', 'employe', 'responsable_rh_chantier'],
+  super_admin: [
+    'super_admin',
+    'drh_holding',
+    'rh_filiale',
+    'chef_service',
+    'employe',
+    'responsable_rh_chantier',
+    ...ROLES_GESTIONNAIRES,
+  ],
+  drh_holding: ['rh_filiale', 'chef_service', 'employe', 'responsable_rh_chantier', ...ROLES_GESTIONNAIRES],
   rh_filiale: ['chef_service', 'employe', 'responsable_rh_chantier'],
   chef_service: [],
   employe: [],
   responsable_rh_chantier: [],
+  gestionnaire_conges_absences: [],
+  gestionnaire_contrats_attestations: [],
+  gestionnaire_paie: [],
+  gestionnaire_temps_presences: [],
+  gestionnaire_personnel_pointage: [],
 };
 
 export function SectionUtilisateurs() {

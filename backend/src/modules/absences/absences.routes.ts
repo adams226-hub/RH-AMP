@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { authentification } from '../../middleware/authentification';
-import { autoriserRoles } from '../../middleware/autorisation';
+import { autoriserRoles, exigerModule, gestionnairesDuModule } from '../../middleware/autorisation';
 import {
   bareme,
   demandesAvis,
@@ -16,6 +16,7 @@ import {
 export const routesAbsences = Router();
 
 routesAbsences.use(authentification);
+routesAbsences.use(exigerModule('absences'));
 
 routesAbsences.get('/bareme', asyncHandler(bareme));
 routesAbsences.get('/solde-permission', asyncHandler(soldePermission));
@@ -30,6 +31,6 @@ routesAbsences.post(
 );
 routesAbsences.post(
   '/demandes/:id/decision',
-  autoriserRoles('rh_filiale', 'drh_holding', 'super_admin'),
+  autoriserRoles('rh_filiale', 'drh_holding', 'super_admin', ...gestionnairesDuModule('absences')),
   asyncHandler(demandesDecision)
 );

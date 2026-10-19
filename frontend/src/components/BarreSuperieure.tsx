@@ -16,6 +16,11 @@ const LIBELLES_ROLE_AFFICHAGE: Record<CodeRole, string> = {
   chef_service: 'Chef de service',
   employe: 'Employé',
   responsable_rh_chantier: 'Responsable RH Chantier',
+  gestionnaire_conges_absences: 'Gestionnaire Congés & Absences',
+  gestionnaire_contrats_attestations: 'Gestionnaire Contrats & Attestations',
+  gestionnaire_paie: 'Gestionnaire Paie',
+  gestionnaire_temps_presences: 'Gestionnaire Temps & Présences',
+  gestionnaire_personnel_pointage: 'Gestionnaire Personnel & Pointage',
 };
 
 // Sélecteur visuel uniquement pour l'instant — ne filtre aucune page (décision produit prise avec

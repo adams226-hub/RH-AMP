@@ -6,6 +6,7 @@ import { IconePaie } from '../components/icones';
 import { MiseEnPage } from '../components/MiseEnPage';
 import { SelecteurEmploye } from '../components/SelecteurEmploye';
 import { useAuth } from '../context/AuthContext';
+import { peutGererModule } from '../permissions';
 import { Filiale } from '../types/postes';
 import { BulletinPaie, ResultatCalculMasse, StatutBulletin } from '../types/paie';
 
@@ -18,7 +19,6 @@ const CHAMP =
 const LABEL = 'mb-1 block text-xs font-medium text-slate-600';
 const BOUTON =
   'rounded-md bg-primary-700 px-4 py-3 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-800 hover:shadow-md disabled:pointer-events-none disabled:opacity-60';
-const ROLES_GESTION = ['super_admin', 'drh_holding', 'rh_filiale'];
 
 const LIBELLES_STATUT: Record<StatutBulletin, string> = {
   brouillon: 'Brouillon',
@@ -38,7 +38,7 @@ const COULEURS_STATUT: Record<StatutBulletin, CouleurBadge> = {
 
 export function Paie() {
   const { jeton, role, employeId: monEmployeId } = useAuth();
-  const peutGerer = role !== null && ROLES_GESTION.includes(role);
+  const peutGerer = peutGererModule(role, 'paie');
   const estEmploye = role === 'employe';
 
   const [employeId, setEmployeId] = useState(estEmploye ? (monEmployeId ?? '') : '');

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { authentification } from '../../middleware/authentification';
-import { autoriserRoles } from '../../middleware/autorisation';
+import { ROLES_GESTIONNAIRES, autoriserRoles } from '../../middleware/autorisation';
 import {
   conges,
   contrats,
@@ -17,7 +17,9 @@ import {
 export const routesTableauxDeBord = Router();
 
 routesTableauxDeBord.use(authentification);
-routesTableauxDeBord.use(autoriserRoles('super_admin', 'drh_holding', 'rh_filiale', 'chef_service'));
+routesTableauxDeBord.use(
+  autoriserRoles('super_admin', 'drh_holding', 'rh_filiale', 'chef_service', ...ROLES_GESTIONNAIRES)
+);
 
 routesTableauxDeBord.get('/effectif', asyncHandler(effectif));
 routesTableauxDeBord.get('/contrats', asyncHandler(contrats));

@@ -11,6 +11,7 @@ import { Modale } from '../components/Modale';
 import { Pagination } from '../components/Pagination';
 import { SelecteurEmploye } from '../components/SelecteurEmploye';
 import { useAuth } from '../context/AuthContext';
+import { peutGererModule } from '../permissions';
 import { useTri } from '../hooks/useTri';
 import {
   CategorieTarifHebergement,
@@ -26,7 +27,6 @@ const CHAMP =
 const BOUTON =
   'rounded-md bg-primary-700 px-4 py-3 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-800 hover:shadow-md disabled:pointer-events-none disabled:opacity-60';
 const PAR_PAGE = 10;
-const ROLES_GESTION = ['super_admin', 'drh_holding', 'rh_filiale'];
 
 const LIBELLES_STATUT: Record<StatutMission, string> = {
   a_venir: 'À venir',
@@ -55,7 +55,7 @@ type Onglet = 'missions' | 'hebergements';
 
 export function Missions() {
   const { jeton, role } = useAuth();
-  const peutGerer = role !== null && ROLES_GESTION.includes(role);
+  const peutGerer = peutGererModule(role, 'missions');
 
   const [onglet, setOnglet] = useState<Onglet>('missions');
 

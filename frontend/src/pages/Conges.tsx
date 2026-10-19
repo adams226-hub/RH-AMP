@@ -9,7 +9,8 @@ import { IconeConges } from '../components/icones';
 import { MiseEnPage } from '../components/MiseEnPage';
 import { Pagination } from '../components/Pagination';
 import { SelecteurEmploye } from '../components/SelecteurEmploye';
-import { useAuth } from '../context/AuthContext';
+import { CodeRole, useAuth } from '../context/AuthContext';
+import { peutGererModule } from '../permissions';
 import { useTri } from '../hooks/useTri';
 import { DemandeConge, DemandeCongeAvecEmploye, SoldeConge, StatutDemandeConge } from '../types/conges';
 import {
@@ -26,7 +27,6 @@ const CHAMP =
 const BOUTON =
   'rounded-md bg-primary-700 px-4 py-3 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-800 hover:shadow-md disabled:pointer-events-none disabled:opacity-60';
 const PAR_PAGE = 10;
-const ROLES_CREATION = ['super_admin', 'drh_holding', 'rh_filiale'];
 
 const LIBELLES_STATUT: Record<StatutDemandeConge, string> = {
   brouillon: 'Brouillon',
@@ -336,11 +336,11 @@ function SectionCongesSpeciauxEmploye({ jeton, employeId }: { jeton: string | nu
 
 // ---------- Vue Gestion : Chef de service / RH Filiale / DRH / Super Admin ----------
 
-function VueGestion({ jeton, role }: { jeton: string | null; role: string | null }) {
+function VueGestion({ jeton, role }: { jeton: string | null; role: CodeRole | null }) {
   const [onglet, setOnglet] = useState<'annuel' | 'special'>('annuel');
   const peutDonnerAvis = role === 'chef_service' || role === 'super_admin';
-  const peutDecider = role === 'rh_filiale' || role === 'drh_holding' || role === 'super_admin';
-  const peutCreer = role !== null && ROLES_CREATION.includes(role);
+  const peutDecider = peutGererModule(role, 'conges');
+  const peutCreer = peutGererModule(role, 'conges');
 
   const [demandes, setDemandes] = useState<DemandeCongeAvecEmploye[]>([]);
   const [erreur, setErreur] = useState<string | null>(null);

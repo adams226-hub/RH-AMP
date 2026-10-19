@@ -10,7 +10,8 @@ import { MiseEnPage } from '../components/MiseEnPage';
 import { Modale } from '../components/Modale';
 import { Pagination } from '../components/Pagination';
 import { SelecteurEmploye } from '../components/SelecteurEmploye';
-import { useAuth } from '../context/AuthContext';
+import { CodeRole, useAuth } from '../context/AuthContext';
+import { peutGererModule } from '../permissions';
 import { useTri } from '../hooks/useTri';
 import { StatutDemandeConge } from '../types/conges';
 import { Chantier } from '../types/pointage';
@@ -30,7 +31,6 @@ const CHAMP =
 const BOUTON =
   'rounded-md bg-primary-700 px-4 py-3 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-800 hover:shadow-md disabled:pointer-events-none disabled:opacity-60';
 const PAR_PAGE = 10;
-const ROLES_CREATION = ['super_admin', 'drh_holding', 'rh_filiale'];
 
 const LIBELLES_STATUT: Record<StatutDemandeConge, string> = {
   brouillon: 'Brouillon',
@@ -411,10 +411,10 @@ function VueEmploye({ jeton, employeId }: { jeton: string | null; employeId: str
 
 // ---------- Vue Gestion ----------
 
-function VueGestion({ jeton, role }: { jeton: string | null; role: string | null }) {
+function VueGestion({ jeton, role }: { jeton: string | null; role: CodeRole | null }) {
   const peutDonnerAvis = role === 'chef_service' || role === 'super_admin';
-  const peutDecider = role === 'rh_filiale' || role === 'drh_holding' || role === 'super_admin';
-  const peutCreer = role !== null && ROLES_CREATION.includes(role);
+  const peutDecider = peutGererModule(role, 'absences');
+  const peutCreer = peutGererModule(role, 'absences');
 
   const [demandes, setDemandes] = useState<DemandeAbsenceAvecEmploye[]>([]);
   const [bareme, setBareme] = useState<EvenementBareme[]>([]);

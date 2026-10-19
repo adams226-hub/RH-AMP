@@ -12,7 +12,12 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto; -- gen_random_uuid()
 -- ENUMS
 -- ============================================================================
 
-CREATE TYPE code_role AS ENUM ('super_admin', 'drh_holding', 'rh_filiale', 'chef_service', 'employe', 'responsable_rh_chantier');
+CREATE TYPE code_role AS ENUM (
+    'super_admin', 'drh_holding', 'rh_filiale', 'chef_service', 'employe', 'responsable_rh_chantier',
+    -- Rôles gestionnaires : quelques modules seulement, toutes filiales (cf. backend/src/middleware/autorisation.ts)
+    'gestionnaire_conges_absences', 'gestionnaire_contrats_attestations', 'gestionnaire_paie',
+    'gestionnaire_temps_presences', 'gestionnaire_personnel_pointage'
+);
 CREATE TYPE statut_utilisateur AS ENUM ('actif', 'suspendu', 'supprime');
 
 CREATE TYPE statut_employe AS ENUM ('en_cours_creation', 'actif', 'suspendu', 'sorti');
@@ -206,7 +211,12 @@ INSERT INTO roles (code, libelle) VALUES
     ('rh_filiale', 'RH Filiale'),
     ('chef_service', 'Chef de service'),
     ('employe', 'Employé'),
-    ('responsable_rh_chantier', 'Responsable RH Chantier');
+    ('responsable_rh_chantier', 'Responsable RH Chantier'),
+    ('gestionnaire_conges_absences', 'Gestionnaire Congés & Absences'),
+    ('gestionnaire_contrats_attestations', 'Gestionnaire Contrats & Attestations'),
+    ('gestionnaire_paie', 'Gestionnaire Paie'),
+    ('gestionnaire_temps_presences', 'Gestionnaire Temps & Présences'),
+    ('gestionnaire_personnel_pointage', 'Gestionnaire Personnel & Pointage');
 
 CREATE TABLE utilisateurs (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),

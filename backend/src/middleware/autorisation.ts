@@ -13,10 +13,47 @@ export function autoriserRoles(...rolesAutorises: CodeRole[]) {
   };
 }
 
+// Rôles "gestionnaires" : profils métier limités à quelques modules, mais sur toutes les filiales.
+// Dans les modules listés, ils ont les mêmes droits de gestion qu'un RH Filiale ; les autres modules
+// leur sont fermés (exigerModule). Modifier une liste ici suffit côté backend — le frontend en garde
+// un miroir dans src/permissions.ts pour le menu et les boutons.
+export type ModuleRh = 'employes' | 'contrats' | 'attestations' | 'pointage' | 'conges' | 'absences' | 'missions' | 'paie';
+
+export const MODULES_PAR_GESTIONNAIRE: Partial<Record<CodeRole, ModuleRh[]>> = {
+  gestionnaire_conges_absences: ['conges', 'absences'],
+  gestionnaire_contrats_attestations: ['contrats', 'attestations'],
+  gestionnaire_paie: ['employes', 'pointage', 'missions', 'paie'],
+  gestionnaire_temps_presences: ['conges', 'absences', 'pointage', 'missions'],
+  gestionnaire_personnel_pointage: ['employes', 'pointage', 'missions'],
+};
+
+export const ROLES_GESTIONNAIRES = Object.keys(MODULES_PAR_GESTIONNAIRE) as CodeRole[];
+
+export function estGestionnaire(role: CodeRole): boolean {
+  return role in MODULES_PAR_GESTIONNAIRE;
+}
+
+// Rôles gestionnaires ayant accès au module — à ajouter aux listes autoriserRoles des actions de gestion.
+export function gestionnairesDuModule(module: ModuleRh): CodeRole[] {
+  return ROLES_GESTIONNAIRES.filter((r) => MODULES_PAR_GESTIONNAIRE[r]!.includes(module));
+}
+
+// Ferme un module aux rôles gestionnaires qui ne l'ont pas. Sans effet sur les autres rôles, dont
+// les accès restent ceux de autoriserRoles/du périmètre filiale.
+export function exigerModule(module: ModuleRh) {
+  return (req: Request, _res: Response, next: NextFunction) => {
+    const role = req.utilisateur?.role;
+    if (role && estGestionnaire(role) && !MODULES_PAR_GESTIONNAIRE[role]!.includes(module)) {
+      throw new ErreurApplicative(403, "Votre rôle ne donne pas accès à ce module");
+    }
+    next();
+  };
+}
+
 // Périmètre filiale de l'utilisateur : null = accès à toutes les filiales
-// (super_admin, drh_holding), sinon liste des filiale_id autorisées.
+// (super_admin, drh_holding, rôles gestionnaires), sinon liste des filiale_id autorisées.
 export function filialesAutoriseesPour(utilisateur: { role: CodeRole; filiales: string[] | null }): string[] | null {
-  if (utilisateur.role === 'super_admin' || utilisateur.role === 'drh_holding') {
+  if (utilisateur.role === 'super_admin' || utilisateur.role === 'drh_holding' || estGestionnaire(utilisateur.role)) {
     return null;
   }
   return utilisateur.filiales ?? [];
@@ -34,7 +71,7 @@ export async function chantiersAutorisesPour(
   role: CodeRole,
   filialesAutorisees: string[] | null
 ): Promise<string[] | null> {
-  if (role === 'super_admin' || role === 'drh_holding') return null;
+  if (role === 'super_admin' || role === 'drh_holding' || estGestionnaire(role)) return null;
 
   if (role === 'rh_filiale') {
     if (filialesAutorisees === null) return null;

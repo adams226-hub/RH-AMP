@@ -1,14 +1,16 @@
 import { Router } from 'express';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { authentification } from '../../middleware/authentification';
-import { autoriserRoles } from '../../middleware/autorisation';
+import { autoriserRoles, exigerModule, gestionnairesDuModule } from '../../middleware/autorisation';
 import { activer, creer, lister, listerExpirations, modifier, obtenir, rompre, renouveler } from './contrats.controller';
 
 export const routesContrats = Router();
 
 routesContrats.use(authentification);
 
-const gestionnairesContrats = autoriserRoles('super_admin', 'drh_holding', 'rh_filiale');
+routesContrats.use(exigerModule('contrats'));
+
+const gestionnairesContrats = autoriserRoles('super_admin', 'drh_holding', 'rh_filiale', ...gestionnairesDuModule('contrats'));
 
 routesContrats.get('/', asyncHandler(lister));
 routesContrats.get('/expirations', gestionnairesContrats, asyncHandler(listerExpirations));

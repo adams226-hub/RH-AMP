@@ -12,6 +12,7 @@ import { Modale } from '../components/Modale';
 import { Pagination } from '../components/Pagination';
 import { TuileStat } from '../components/TuileStat';
 import { useAuth } from '../context/AuthContext';
+import { peutGererModule } from '../permissions';
 import { useTri } from '../hooks/useTri';
 import { Employe, OPTIONS_MODE_PAIEMENT, ResumeRhEmploye, StatutEmploye, TauxJournalier } from '../types/employe';
 import { Chantier } from '../types/pointage';
@@ -65,11 +66,10 @@ const LIBELLES_STATUT: Record<StatutEmploye, string> = {
 };
 
 // Seuls ces rôles peuvent créer/activer un employé — même règle que le backend (autoriserRoles).
-const ROLES_GESTION = ['super_admin', 'drh_holding', 'rh_filiale'];
 
 export function Employes() {
   const { jeton, role } = useAuth();
-  const peutGerer = role !== null && ROLES_GESTION.includes(role);
+  const peutGerer = peutGererModule(role, 'employes');
 
   const [employes, setEmployes] = useState<Employe[]>([]);
   const [filiales, setFiliales] = useState<Filiale[]>([]);

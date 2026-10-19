@@ -7,6 +7,7 @@ import { MiseEnPage } from '../components/MiseEnPage';
 import { Modale } from '../components/Modale';
 import { SelecteurEmploye } from '../components/SelecteurEmploye';
 import { useAuth } from '../context/AuthContext';
+import { peutGererModule } from '../permissions';
 import {
   AnomalieAbsence,
   Chantier,
@@ -24,7 +25,6 @@ const LABEL = 'mb-1 block text-xs font-medium text-slate-600';
 const BOUTON =
   'rounded-md bg-primary-700 px-4 py-3 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-800 hover:shadow-md disabled:pointer-events-none disabled:opacity-60';
 const ROLES_SAISIE = ['super_admin', 'drh_holding', 'rh_filiale', 'responsable_rh_chantier'];
-const ROLES_VALIDATION = ['super_admin', 'drh_holding', 'rh_filiale'];
 
 const LIBELLES_STATUT: Record<StatutPointageMensuel, string> = {
   brouillon: 'Brouillon',
@@ -87,8 +87,8 @@ const JOUR_VIDE: SaisieJour = { heures: '', codeAbsence: '' };
 
 export function Pointage() {
   const { jeton, role } = useAuth();
-  const peutSaisir = role !== null && ROLES_SAISIE.includes(role);
-  const peutValider = role !== null && ROLES_VALIDATION.includes(role);
+  const peutSaisir = role !== null && (ROLES_SAISIE.includes(role) || peutGererModule(role, 'pointage'));
+  const peutValider = peutGererModule(role, 'pointage');
 
   const [chantiers, setChantiers] = useState<Chantier[]>([]);
   const [erreur, setErreur] = useState<string | null>(null);

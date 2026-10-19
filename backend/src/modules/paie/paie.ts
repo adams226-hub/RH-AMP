@@ -2,7 +2,7 @@ import { Request, Response, Router } from 'express';
 import { z } from 'zod';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { authentification } from '../../middleware/authentification';
-import { autoriserRoles, filialesAutoriseesPour } from '../../middleware/autorisation';
+import { autoriserRoles, exigerModule, filialesAutoriseesPour, gestionnairesDuModule } from '../../middleware/autorisation';
 import { pool } from '../../config/db';
 import { ErreurApplicative } from '../../middleware/gestionErreurs';
 import { verifierCycleOuvertPourEmploye, verifierCycleOuvertPourFiliale } from '../cyclesPaie/verrouCycle';
@@ -953,11 +953,15 @@ export const routesPaie = Router();
 
 routesPaie.use(authentification);
 
-const gestionnairesPaie = autoriserRoles('super_admin', 'drh_holding', 'rh_filiale');
+const gestionnairesPaie = autoriserRoles('super_admin', 'drh_holding', 'rh_filiale', ...gestionnairesDuModule('paie'));
+// Le Simulateur est un module distinct de la Paie : aucun rôle gestionnaire n'y a accès.
+const accesSimulateur = autoriserRoles('super_admin', 'drh_holding', 'rh_filiale');
+
+routesPaie.use(exigerModule('paie'));
 
 routesPaie.get('/bulletins', asyncHandler(lister));
 routesPaie.get('/bulletins/:id/fiche', asyncHandler(fiche));
 routesPaie.post('/bulletins/calculer', gestionnairesPaie, asyncHandler(calculer));
 routesPaie.post('/bulletins/calculer-masse', gestionnairesPaie, asyncHandler(calculerMasse));
-routesPaie.post('/simuler-net-vers-brut', gestionnairesPaie, asyncHandler(simuler));
+routesPaie.post('/simuler-net-vers-brut', accesSimulateur, asyncHandler(simuler));
 routesPaie.post('/bulletins/:id/statut', autoriserRoles('super_admin', 'drh_holding'), asyncHandler(changerStatut));

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { authentification } from '../../middleware/authentification';
-import { autoriserRoles } from '../../middleware/autorisation';
+import { autoriserRoles, exigerModule, gestionnairesDuModule } from '../../middleware/autorisation';
 import {
   archiverMaison,
   creer,
@@ -20,9 +20,10 @@ import {
 
 export const routesMissions = Router();
 
-const ROLES_GESTION = ['super_admin', 'drh_holding', 'rh_filiale'] as const;
+const ROLES_GESTION = ['super_admin', 'drh_holding', 'rh_filiale', ...gestionnairesDuModule('missions')] as const;
 
 routesMissions.use(authentification);
+routesMissions.use(exigerModule('missions'));
 
 routesMissions.get('/', asyncHandler(lister));
 routesMissions.get('/export-excel', asyncHandler(exportExcel));

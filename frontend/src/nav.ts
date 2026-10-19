@@ -1,4 +1,5 @@
 import { CodeRole } from './context/AuthContext';
+import { ModuleRh, ROLES_GESTIONNAIRES, estGestionnaire, moduleOuvert } from './permissions';
 import {
   IconeAbsences,
   IconeAttestations,
@@ -20,6 +21,8 @@ export interface LienNav {
   libelle: string;
   icone: (props: { className?: string }) => JSX.Element;
   roles?: CodeRole[];
+  // Module RH du lien : décide seul de sa visibilité pour les rôles gestionnaires (cf. permissions.ts).
+  module?: ModuleRh;
 }
 
 export interface GroupeNav {
@@ -39,24 +42,26 @@ export const GROUPES: GroupeNav[] = [
         vers: '/tableaux-de-bord',
         libelle: 'Tableaux de bord',
         icone: IconeTableauxDeBord,
-        roles: ['super_admin', 'drh_holding', 'rh_filiale', 'chef_service'],
+        roles: ['super_admin', 'drh_holding', 'rh_filiale', 'chef_service', ...ROLES_GESTIONNAIRES],
       },
     ],
   },
   {
     titre: 'Personnel',
     liens: [
-      { vers: '/employes', libelle: 'Employés', icone: IconeEmployes },
+      { vers: '/employes', libelle: 'Employés', icone: IconeEmployes, module: 'employes' },
       {
         vers: '/contrats',
         libelle: 'Contrats',
         icone: IconeContrats,
+        module: 'contrats',
         roles: ['super_admin', 'drh_holding', 'rh_filiale'],
       },
       {
         vers: '/attestations',
         libelle: 'Attestations',
         icone: IconeAttestations,
+        module: 'attestations',
         roles: ['super_admin', 'drh_holding', 'rh_filiale'],
       },
     ],
@@ -68,11 +73,12 @@ export const GROUPES: GroupeNav[] = [
         vers: '/pointage',
         libelle: 'Pointage',
         icone: IconePointage,
+        module: 'pointage',
         roles: ['super_admin', 'drh_holding', 'rh_filiale', 'responsable_rh_chantier'],
       },
-      { vers: '/conges', libelle: 'Congés', icone: IconeConges },
-      { vers: '/absences', libelle: 'Absences', icone: IconeAbsences },
-      { vers: '/missions', libelle: 'Missions', icone: IconeMissions },
+      { vers: '/conges', libelle: 'Congés', icone: IconeConges, module: 'conges' },
+      { vers: '/absences', libelle: 'Absences', icone: IconeAbsences, module: 'absences' },
+      { vers: '/missions', libelle: 'Missions', icone: IconeMissions, module: 'missions' },
     ],
   },
   {
@@ -88,6 +94,7 @@ export const GROUPES: GroupeNav[] = [
         vers: '/paie',
         libelle: 'Paie',
         icone: IconePaie,
+        module: 'paie',
         roles: ['super_admin', 'drh_holding', 'rh_filiale', 'employe'],
       },
       {
@@ -115,3 +122,18 @@ export const GROUPES: GroupeNav[] = [
 // Liste à plat dérivée des groupes — pratique partout où seule la recherche d'un lien par route
 // compte (ex. le fil d'Ariane n'a pas besoin de connaître les groupes pour trouver la page active).
 export const LIENS: LienNav[] = GROUPES.flatMap((g) => g.liens);
+
+// Un rôle gestionnaire voit les liens de ses modules, plus ceux qui le listent dans `roles` (tableau
+// de bord) ; pour les autres rôles, seule la liste `roles` compte, comme avant.
+export function lienVisible(lien: LienNav, role: CodeRole | null): boolean {
+  if (estGestionnaire(role)) {
+    return lien.module ? moduleOuvert(role, lien.module) : !!lien.roles?.includes(role!);
+  }
+  return !lien.roles || (role !== null && lien.roles.includes(role));
+}
+
+// Page d'arrivée après connexion : Employés si accessible, sinon le premier lien visible.
+export function pageAccueil(role: CodeRole | null): string {
+  const visibles = LIENS.filter((l) => lienVisible(l, role));
+  return visibles.find((l) => l.vers === '/employes')?.vers ?? visibles[0]?.vers ?? '/employes';
+}

@@ -12,6 +12,7 @@ import { Modale } from '../components/Modale';
 import { Pagination } from '../components/Pagination';
 import { SelecteurEmploye } from '../components/SelecteurEmploye';
 import { useAuth } from '../context/AuthContext';
+import { peutGererModule } from '../permissions';
 import { useTri } from '../hooks/useTri';
 import { Contrat, ContratAvecEmploye, StatutContrat, TypeContrat } from '../types/contrats';
 import { Filiale } from '../types/postes';
@@ -23,7 +24,6 @@ const LABEL = 'mb-1 block text-xs font-medium text-slate-600';
 const BOUTON =
   'rounded-md bg-primary-700 px-4 py-3 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-800 hover:shadow-md disabled:pointer-events-none disabled:opacity-60';
 const PAR_PAGE = 10;
-const ROLES_GESTION = ['super_admin', 'drh_holding', 'rh_filiale'];
 
 const LIBELLES_STATUT: Record<StatutContrat, string> = {
   brouillon: 'Brouillon',
@@ -47,7 +47,7 @@ const COULEURS_STATUT: Record<StatutContrat, CouleurBadge> = {
 
 export function Contrats() {
   const { jeton, role } = useAuth();
-  const peutGerer = role !== null && ROLES_GESTION.includes(role);
+  const peutGerer = peutGererModule(role, 'contrats');
 
   const [contrats, setContrats] = useState<ContratAvecEmploye[]>([]);
   const [expirations, setExpirations] = useState<Contrat[]>([]);
