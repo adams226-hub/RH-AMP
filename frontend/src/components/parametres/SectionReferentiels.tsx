@@ -1152,10 +1152,13 @@ function SectionMaisonsHote() {
   );
 }
 
-// Départements, Services et Maisons d'hôte masqués à la demande de l'utilisateur (non utilisés). Le
-// code et les données restent en place : repasser à true pour les réafficher.
+// Départements, Services, Maisons d'hôte et Lieux d'affectation masqués à la demande de
+// l'utilisateur. Le code et les données restent en place : repasser à true pour les réafficher.
+// Lieux d'affectation : les chantiers existants restent utilisés par Pointage et la fiche employé,
+// seule leur gestion (création, renommage, archivage) disparaît d'ici.
 const AFFICHER_DEPARTEMENTS_SERVICES = false;
 const AFFICHER_MAISONS_HOTE = false;
+const AFFICHER_LIEUX_AFFECTATION = false;
 
 export function SectionReferentiels() {
   return (
@@ -1174,7 +1177,7 @@ export function SectionReferentiels() {
         )}
         <SectionCategories />
         <SectionFonctions />
-        <SectionChantiers />
+        {AFFICHER_LIEUX_AFFECTATION && <SectionChantiers />}
         {AFFICHER_MAISONS_HOTE && <SectionMaisonsHote />}
       </div>
     </div>
