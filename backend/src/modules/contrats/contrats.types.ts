@@ -52,10 +52,13 @@ export interface CreationContrat extends ComposantesRemuneration {
   salaireBase: number;
 }
 
-// Édition d'un contrat existant — réservée aux contrats non encore actifs (brouillon/signé), cf.
-// contrats.service.ts modifierContrat. employeId n'est volontairement pas modifiable (réassigner
-// un contrat à un autre employé n'a pas de sens métier — il faut en créer un nouveau).
-export type ModificationContrat = Partial<Omit<CreationContrat, 'employeId'>>;
+// Édition d'un contrat existant — brouillon, signé ou actif, cf. contrats.service.ts
+// modifierContrat. employeId n'est volontairement pas modifiable (réassigner un contrat à un
+// autre employé n'a pas de sens métier — il faut en créer un nouveau). dateFin = null efface la
+// date de fin (passage en CDI).
+export type ModificationContrat = Partial<Omit<CreationContrat, 'employeId' | 'dateFin'>> & {
+  dateFin?: string | null;
+};
 
 export interface RenouvellementContrat extends ComposantesRemuneration {
   dateDebut: string;

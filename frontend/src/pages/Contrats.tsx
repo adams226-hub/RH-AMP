@@ -409,6 +409,15 @@ export function Contrats() {
                           <button
                             onClick={() => {
                               setContratActif(c);
+                              setActionModale('modifier');
+                            }}
+                            className="font-medium text-primary-700 transition-colors duration-200 hover:underline"
+                          >
+                            Modifier
+                          </button>
+                          <button
+                            onClick={() => {
+                              setContratActif(c);
                               setActionModale('renouveler');
                             }}
                             className="font-medium text-primary-700 transition-colors duration-200 hover:underline"
@@ -514,7 +523,7 @@ function FormulaireModification({
       await api.modifierContrat(jeton, contrat.id, {
         type,
         dateDebut,
-        dateFin: type === 'cdi' ? undefined : dateFin || undefined,
+        dateFin: type === 'cdi' ? null : dateFin || undefined,
         salaireBase: Number(salaireBase),
         sursalaire: Number(sursalaire),
         indemniteLogement: Number(indemniteLogement),
@@ -534,6 +543,12 @@ function FormulaireModification({
   return (
     <Modale titre={`Modifier — ${contrat.employeNom} ${contrat.employePrenoms}`} onFermer={onFermer}>
       <form onSubmit={soumettre} className="space-y-3">
+        {contrat.statut === 'actif' && (
+          <div className="rounded-md bg-alerte-100 px-3 py-2 text-sm text-alerte-700">
+            Ce contrat est actif : les modifications s'appliqueront aux prochains calculs de paie. Les bulletins déjà
+            calculés ne changent pas.
+          </div>
+        )}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label className={LABEL}>Type</label>

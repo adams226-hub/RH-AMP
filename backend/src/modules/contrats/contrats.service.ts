@@ -164,9 +164,12 @@ export async function activerContrat(id: string): Promise<Contrat> {
   return mapLigne(rows[0]);
 }
 
-// Réservé aux contrats pas encore actifs : une fois actif, un contrat sert de base au calcul de
-// paie (paie.ts) et à l'historique — toute correction doit passer par Renouveler (nouvelle ligne,
-// contrat_precedent_id) plutôt que réécrire silencieusement un contrat déjà en usage.
+// Autorisé jusqu'au statut actif inclus (correction de saisie, augmentation...). Les bulletins
+// déjà calculés gardent leurs montants (snapshot dans bulletins_paie) : la modification ne
+// s'applique qu'aux calculs de paie suivants, et reste tracée dans le Journal d'audit. Un contrat
+// clos (renouvelé, expiré, rompu, terminé) fait partie de l'historique et n'est plus modifiable.
+const STATUTS_MODIFIABLES: Contrat['statut'][] = ['brouillon', 'signe', 'actif'];
+
 export async function modifierContrat(id: string, donnees: ModificationContrat): Promise<Contrat> {
   const contrat = await obtenirContrat(id);
 
@@ -174,11 +177,8 @@ export async function modifierContrat(id: string, donnees: ModificationContrat):
     throw new ErreurApplicative(404, 'Contrat introuvable');
   }
 
-  if (contrat.statut !== 'brouillon' && contrat.statut !== 'signe') {
-    throw new ErreurApplicative(
-      409,
-      `Impossible de modifier un contrat au statut « ${contrat.statut} » — utilisez Renouveler pour un contrat actif`
-    );
+  if (!STATUTS_MODIFIABLES.includes(contrat.statut)) {
+    throw new ErreurApplicative(409, `Impossible de modifier un contrat au statut « ${contrat.statut} »`);
   }
 
   const typeResultant = donnees.type ?? contrat.type;

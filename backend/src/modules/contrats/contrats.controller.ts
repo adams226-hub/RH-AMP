@@ -34,7 +34,11 @@ const schemaCreation = z.object({
   ...composantesRemuneration,
 });
 
-const schemaModification = schemaCreation.omit({ employeId: true }).partial();
+// dateFin accepte null : passer un CDD/CDC/Stage en CDI doit effacer la date de fin.
+const schemaModification = schemaCreation
+  .omit({ employeId: true })
+  .extend({ dateFin: z.string().nullable() })
+  .partial();
 
 const schemaRenouvellement = z.object({
   dateDebut: z.string(),

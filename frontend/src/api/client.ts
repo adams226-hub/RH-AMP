@@ -450,7 +450,7 @@ export const api = {
     donnees: Partial<{
       type: string;
       dateDebut: string;
-      dateFin: string;
+      dateFin: string | null;
       salaireBase: number;
     } & ComposantesRemuneration>
   ) => requete<Contrat>(`/api/contrats/${id}`, { method: 'PATCH', body: JSON.stringify(donnees) }, jeton),
