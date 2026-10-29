@@ -280,8 +280,8 @@ export const api = {
       sexe: 'M' | 'F';
       nationalite: string;
       telephone: string;
-      numCnib: string;
-      numCnss: string;
+      numCnib: string | null;
+      numCnss: string | null;
       rib?: string;
       banque?: string;
       modePaiement?: string;
@@ -316,8 +316,8 @@ export const api = {
       sexe: 'M' | 'F';
       nationalite: string;
       telephone: string;
-      numCnib: string;
-      numCnss: string;
+      numCnib: string | null;
+      numCnss: string | null;
       rib: string;
       banque: string;
       modePaiement: string;

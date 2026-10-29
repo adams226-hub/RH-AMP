@@ -297,8 +297,8 @@ export function Employes() {
       sexe: employe.sexe,
       nationalite: employe.nationalite,
       telephone: employe.telephone,
-      numCnib: employe.numCnib,
-      numCnss: employe.numCnss,
+      numCnib: employe.numCnib ?? '',
+      numCnss: employe.numCnss ?? '',
       rib: employe.rib ?? '',
       banque: employe.banque ?? '',
       modePaiement: employe.modePaiement ?? '',
@@ -342,6 +342,9 @@ export function Employes() {
       const payload = {
         ...champs,
         filialeId,
+        // null (et non undefined) : vider le champ en modification efface bien le numéro enregistré.
+        numCnib: champs.numCnib.trim() || null,
+        numCnss: champs.numCnss.trim() || null,
         rib: champs.rib || undefined,
         banque: champs.banque || undefined,
         modePaiement: champs.modePaiement || undefined,
@@ -496,11 +499,11 @@ export function Employes() {
             </div>
             <div>
               <label className={LABEL}>N° CNIB</label>
-              <input value={champs.numCnib} onChange={(e) => majChamp('numCnib', e.target.value)} required className={CHAMP} />
+              <input value={champs.numCnib} onChange={(e) => majChamp('numCnib', e.target.value)} className={CHAMP} />
             </div>
             <div>
               <label className={LABEL}>N° CNSS</label>
-              <input value={champs.numCnss} onChange={(e) => majChamp('numCnss', e.target.value)} required className={CHAMP} />
+              <input value={champs.numCnss} onChange={(e) => majChamp('numCnss', e.target.value)} className={CHAMP} />
             </div>
             <div>
               <label className={LABEL}>Filiale</label>
@@ -861,8 +864,8 @@ export function Employes() {
               ['Sexe', employeSelectionne.sexe],
               ['Nationalité', employeSelectionne.nationalite],
               ['Téléphone', employeSelectionne.telephone],
-              ['N° CNIB', employeSelectionne.numCnib],
-              ['N° CNSS', employeSelectionne.numCnss],
+              ['N° CNIB', employeSelectionne.numCnib ?? 'Non renseigné'],
+              ['N° CNSS', employeSelectionne.numCnss ?? 'Non renseigné'],
               ['Date de naissance', formaterDateFr(employeSelectionne.dateNaissance)],
               ["Date d'embauche", formaterDateFr(employeSelectionne.dateEmbauche)],
               ['Situation matrimoniale', employeSelectionne.situationMatrimoniale ?? 'Non renseignée'],

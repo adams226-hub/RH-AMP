@@ -140,7 +140,7 @@ interface EmployePourAttestation {
   sexe: 'M' | 'F';
   dateNaissance: string | null;
   lieuNaissance: string | null;
-  numCnib: string;
+  numCnib: string | null;
   dateEmbauche: string;
   dateSortie: string | null;
   statut: string;

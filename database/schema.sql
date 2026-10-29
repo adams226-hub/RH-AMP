@@ -272,8 +272,8 @@ CREATE TABLE employes (
     contact_urgence_tel   TEXT,
     contact_urgence_tel2  TEXT, -- second numéro de la personne à prévenir en cas de besoin
     maladie_particuliere  TEXT, -- ex. hypertension, diabète — information médicale sensible, cf. confidentialite_document pour les documents associés
-    num_cnib              TEXT NOT NULL,
-    num_cnss              TEXT NOT NULL,
+    num_cnib              TEXT, -- facultatif : pas toujours connu à l'embauche
+    num_cnss              TEXT, -- facultatif : immatriculation CNSS parfois en cours
     rib                   TEXT, -- sert aussi de "N° de compte" sur le bulletin de paie
     banque                TEXT,
     mode_paiement         TEXT, -- libre (espèces/virement/chèque...), non contraint : valeurs non confirmées

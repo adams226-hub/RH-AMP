@@ -11,8 +11,8 @@ export interface Employe {
   sexe: 'M' | 'F';
   nationalite: string;
   telephone: string;
-  numCnib: string;
-  numCnss: string;
+  numCnib: string | null;
+  numCnss: string | null;
   rib: string | null;
   banque: string | null;
   modePaiement: string | null;
@@ -64,8 +64,8 @@ export interface CreationEmploye {
   sexe: 'M' | 'F';
   nationalite: string;
   telephone: string;
-  numCnib: string;
-  numCnss: string;
+  numCnib?: string | null;
+  numCnss?: string | null;
   rib?: string;
   banque?: string;
   modePaiement?: string;
