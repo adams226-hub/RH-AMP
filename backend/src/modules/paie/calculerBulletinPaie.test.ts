@@ -131,8 +131,11 @@ describe('calculerBulletinPaie — heures sup au forfait (demande explicite)', (
   });
 });
 
+// Le simulateur vise le SALAIRE NET (avant FSP 1%), pas le net à payer — cf. calculerBrutDepuisNet.
+// Les cibles sont donc les salaires nets des bulletins réels ci-dessus, recalculés par le moteur
+// direct : le net à payer réel (69 440 / 217 323) doit alors être retrouvé lui aussi.
 describe('calculerBrutDepuisNet — calcul inverse (ADDENDUM §6)', () => {
-  test('retrouve le salaire de base de ZALE IDRISSA à partir du net 69 440', () => {
+  test('retrouve le salaire de base de ZALE IDRISSA à partir de son salaire net', () => {
     const employeSansBase: Employe = {
       salaireDeBase: 0,
       indemniteLogement: 0,
@@ -146,20 +149,24 @@ describe('calculerBrutDepuisNet — calcul inverse (ADDENDUM §6)', () => {
       declarationCnss: 'O',
       personnesACharge: 2,
     };
+    const netCible = calculerBulletinPaie({ ...employeSansBase, salaireDeBase: 76992 }, ELEMENTS_SANS_AJUSTEMENT, TAUX_CONNUS).salaireNet;
 
-    const resultat = calculerBrutDepuisNet(69440, employeSansBase, ELEMENTS_SANS_AJUSTEMENT, TAUX_CONNUS, 'salaireDeBase', 0.1);
+    const resultat = calculerBrutDepuisNet(netCible, employeSansBase, ELEMENTS_SANS_AJUSTEMENT, TAUX_CONNUS, 'salaireDeBase');
 
     expect(resultat.convergence).toBe(true);
+    expect(resultat.bulletin.salaireNet).toBe(netCible);
     expect(resultat.bulletin.netAPayer).toBeCloseTo(69440, 0);
+    expect(Number.isInteger(resultat.valeurTrouvee)).toBe(true);
     // Le moteur arrondit à plusieurs étapes en cascade (prime ancienneté, abattement,
     // IUTS...) : plusieurs salaires de base voisins produisent le même net arrondi au
-    // franc — la dichotomie retombe n'importe où dans cette plage de quelques francs,
-    // pas nécessairement sur la valeur d'origine au F CFA près. Tolérance élargie en
-    // conséquence (le net, lui, reste vérifié au F CFA près ci-dessus).
-    expect(Math.abs(resultat.valeurTrouvee - 76992)).toBeLessThan(5);
+    // franc, et l'IUTS calculé par tranches de 100 F fait même redescendre le net par
+    // endroits (ILI ADAMA : 76 973 et 76 992 donnent le même net) — la recherche retient le
+    // plus bas de ces montants, au plus égal à la valeur d'origine.
+    expect(resultat.valeurTrouvee).toBeLessThanOrEqual(76992);
+    expect(resultat.valeurTrouvee).toBeGreaterThan(76992 - 100);
   });
 
-  test('retrouve le salaire de base de ILI ADAMA à partir du net 217 323', () => {
+  test('retrouve le salaire de base de ILI ADAMA à partir de son salaire net', () => {
     const employeSansBase: Employe = {
       salaireDeBase: 0,
       indemniteLogement: 35000,
@@ -173,20 +180,44 @@ describe('calculerBrutDepuisNet — calcul inverse (ADDENDUM §6)', () => {
       declarationCnss: 'O',
       personnesACharge: 0,
     };
+    const elements = { ...ELEMENTS_SANS_AJUSTEMENT, panier: 23400 };
+    const netCible = calculerBulletinPaie({ ...employeSansBase, salaireDeBase: 76992 }, elements, TAUX_CONNUS).salaireNet;
 
-    const resultat = calculerBrutDepuisNet(
-      217323,
-      employeSansBase,
-      { ...ELEMENTS_SANS_AJUSTEMENT, panier: 23400 },
-      TAUX_CONNUS,
-      'salaireDeBase',
-      0.1
-    );
+    const resultat = calculerBrutDepuisNet(netCible, employeSansBase, elements, TAUX_CONNUS, 'salaireDeBase');
 
     expect(resultat.convergence).toBe(true);
+    expect(resultat.bulletin.salaireNet).toBe(netCible);
     expect(resultat.bulletin.netAPayer).toBeCloseTo(217323, 0);
-    // cf. commentaire du test ZALE ci-dessus — plage de quelques francs inhérente aux
-    // arrondis en cascade, pas une imprécision de la dichotomie elle-même.
-    expect(Math.abs(resultat.valeurTrouvee - 76992)).toBeLessThan(5);
+    expect(Number.isInteger(resultat.valeurTrouvee)).toBe(true);
+    expect(resultat.valeurTrouvee).toBeLessThanOrEqual(76992);
+    expect(resultat.valeurTrouvee).toBeGreaterThan(76992 - 100);
+  });
+
+  // Cas remonté par la RH depuis le Simulateur : un net de 3 000 000 affichait 3 000 001.
+  test('sursalaire pour un salaire net de 3 000 000 : jamais au-dessus de la cible', () => {
+    const cadre: Employe = {
+      salaireDeBase: 75000,
+      indemniteLogement: 75000,
+      indemniteTransport: 17500,
+      indemniteSujetion: 64000,
+      indemniteAstreinte: 75000,
+      indemniteFonction: 75000,
+      sursalaire: 0,
+      dateEntree: DATE_REFERENCE,
+      categorie: 'CADRE',
+      declarationCnss: 'O',
+      personnesACharge: 0,
+    };
+
+    const resultat = calculerBrutDepuisNet(3_000_000, cadre, ELEMENTS_SANS_AJUSTEMENT, TAUX_CONNUS, 'sursalaire');
+
+    expect(Number.isInteger(resultat.valeurTrouvee)).toBe(true);
+    expect(resultat.bulletin.salaireNet).toBeLessThanOrEqual(3_000_000);
+    // Aucun sursalaire ne donne un net plus proche sans dépasser, et aucun plus bas ne donne le même net.
+    for (let ecart = -300; ecart <= 300; ecart++) {
+      const net = calculerBulletinPaie({ ...cadre, sursalaire: resultat.valeurTrouvee + ecart }, ELEMENTS_SANS_AJUSTEMENT, TAUX_CONNUS).salaireNet;
+      if (net <= 3_000_000) expect(net).toBeLessThanOrEqual(resultat.bulletin.salaireNet);
+      if (ecart < 0) expect(net).toBeLessThan(resultat.bulletin.salaireNet);
+    }
   });
 });

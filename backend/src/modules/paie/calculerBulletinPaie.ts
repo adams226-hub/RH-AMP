@@ -682,39 +682,58 @@ export interface ResultatCalculInverse {
   convergence: boolean;
 }
 
+// Cible = salaire net (avant la retenue FSP de 1%), pas le net à payer final — c'est ce que
+// désigne "un net de X" côté RH/recrutement (net à payer n'est qu'une étape ultérieure).
+//
+// Recherche en francs entiers (on ne verse pas de centimes) du plus grand montant dont le
+// salaire net ne dépasse pas la cible : net exact quand il est atteignable, sinon le plus
+// proche par défaut — jamais au-dessus (cf. demande RH : un simulateur à 3 000 000 affichait
+// 3 000 001). Les arrondis en cascade (IUTS à la centaine...) font avancer le net par sauts :
+// le net exact n'existe pas toujours, convergence = false l'indique alors.
 export function calculerBrutDepuisNet(
   netCible: number,
   employe: Employe,
   elementsVariables: ElementsVariables,
   tauxConfigurables: TauxConfigurables,
-  champVariable: ChampVariable = 'salaireDeBase',
-  tolerance: number = 1
+  champVariable: ChampVariable = 'salaireDeBase'
 ): ResultatCalculInverse {
+  const calculer = (valeur: number) =>
+    calculerBulletinPaie({ ...employe, [champVariable]: valeur }, elementsVariables, tauxConfigurables);
+
+  // Borne haute : premier montant dont le net dépasse la cible (doublée tant que nécessaire).
   let borneBasse = 0;
-  let borneHaute = Math.max(netCible * 2, 1);
-  let valeur = 0;
-  let bulletin: BulletinPaie | undefined;
+  let borneHaute = Math.max(Math.ceil(netCible * 2), 1);
+  for (let i = 0; i < 20 && calculer(borneHaute).salaireNet <= netCible; i++) {
+    borneBasse = borneHaute;
+    borneHaute *= 2;
+  }
 
-  for (let i = 0; i < 50; i++) {
-    valeur = (borneBasse + borneHaute) / 2;
-    const employeEssai: Employe = { ...employe, [champVariable]: valeur };
-    bulletin = calculerBulletinPaie(employeEssai, elementsVariables, tauxConfigurables);
-
-    // Cible = salaire net (avant la retenue FSP de 1%), pas le net à payer final — c'est ce que
-    // désigne "un net de X" côté RH/recrutement (net à payer n'est qu'une étape ultérieure).
-    const ecart = bulletin.salaireNet - netCible;
-    if (Math.abs(ecart) <= tolerance) {
-      return { bulletin, champVariable, valeurTrouvee: valeur, ecartFinal: ecart, convergence: true };
-    }
-
-    if (bulletin.salaireNet < netCible) {
-      borneBasse = valeur;
+  // Invariant : net(borneBasse) <= cible < net(borneHaute), sauf si net(0) dépasse déjà la cible
+  // (autres éléments trop élevés) — on retourne alors 0, le plus proche possible.
+  while (borneHaute - borneBasse > 1) {
+    const milieu = Math.floor((borneBasse + borneHaute) / 2);
+    if (calculer(milieu).salaireNet <= netCible) {
+      borneBasse = milieu;
     } else {
-      borneHaute = valeur;
+      borneHaute = milieu;
     }
   }
 
-  // 50 itérations non atteintes à la tolérance exacte (cf. addendum §2) — on retourne
-  // le meilleur résultat trouvé plutôt que d'échouer silencieusement.
-  return { bulletin: bulletin!, champVariable, valeurTrouvee: valeur, ecartFinal: bulletin!.salaireNet - netCible, convergence: false };
+  // Plusieurs montants voisins donnent le même net (base imposable arrondie à la centaine) : on
+  // retient le plus bas d'entre eux — même net pour l'employé, coût moindre pour l'employeur.
+  const netAtteint = calculer(borneBasse).salaireNet;
+  let plusBas = 0;
+  let plusHaut = borneBasse;
+  while (plusHaut - plusBas > 0) {
+    const milieu = Math.floor((plusBas + plusHaut) / 2);
+    if (calculer(milieu).salaireNet >= netAtteint) {
+      plusHaut = milieu;
+    } else {
+      plusBas = milieu + 1;
+    }
+  }
+
+  const bulletin = calculer(plusHaut);
+  const ecartFinal = bulletin.salaireNet - netCible;
+  return { bulletin, champVariable, valeurTrouvee: plusHaut, ecartFinal, convergence: ecartFinal === 0 };
 }
